@@ -1,0 +1,7 @@
+# Python packages available to your DAGs and tasks.
+# Pin everything - unpinned installs are how Airflow environments rot.
+#
+# Examples:
+# apache-airflow-providers-google==12.0.0
+# pandas==2.2.3
+# requests==2.32.3

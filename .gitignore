@@ -1,0 +1,19 @@
+# Astro / Airflow local state
+.astro/
+airflow.db
+airflow.db-*
+airflow.cfg
+webserver_config.py
+logs/
+simple_auth_manager_passwords.json.generated
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Local outputs
+output_files/
