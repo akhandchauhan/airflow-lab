@@ -9,6 +9,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
     steps:
       - uses: actions/checkout@v4
 
@@ -27,4 +29,16 @@ jobs:
         run: uv run ruff check dags/ include/ tests/ --select E,F,AIR3
 
       - name: DAG integrity tests
-        run: uv run pytest tests/ -q
+        run: uv run pytest tests/ -v --tb=long
+
+      # Surfaces the failure in the run summary so it is readable without
+      # downloading the raw log.
+      - name: Failure summary
+        if: failure()
+        run: |
+          {
+            echo '## pytest failure'
+            echo '```'
+            uv run pytest tests/ --tb=long -q 2>&1 | tail -60
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,5 +1,6 @@
 # Astro / Airflow local state
 .astro/
+.airflow-test-home/
 airflow.db
 airflow.db-*
 airflow.cfg
