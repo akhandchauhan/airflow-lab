@@ -13,10 +13,10 @@ jobs:
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"
       AIRFLOW_HOME: ${{ github.workspace }}/.airflow
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
 
       - name: Install Airflow (constrained)
         run: |
@@ -32,8 +32,8 @@ jobs:
       - name: DAG integrity tests
         run: uv run pytest tests/ -v --tb=long
 
-      # Surface the traceback as a check annotation AND in the run summary,
-      # so the failure is readable without downloading the raw log archive.
+      # Surface the traceback as a check annotation AND in the run summary, so
+      # the failure is readable without downloading the raw log archive.
       - name: Annotate failure
         if: failure()
         run: |

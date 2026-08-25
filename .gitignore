@@ -1,12 +1,14 @@
-# Astro / Airflow local state
+# Airflow local state (AIRFLOW_HOME is ./.airflow - see devcontainer.json)
+.airflow/
 .astro/
-.airflow-test-home/
 airflow.db
 airflow.db-*
 airflow.cfg
 webserver_config.py
 logs/
-simple_auth_manager_passwords.json.generated
+
+# Generated credentials - never commit these
+*.json.generated
 
 # Python
 .venv/

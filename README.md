@@ -17,22 +17,68 @@ Docker and no cloud spend.
 
 4. Open the **Ports** tab → click the globe icon on port **8080**
 
-Username is `admin`. The password prints to the terminal and is also written to
-`$AIRFLOW_HOME/simple_auth_manager_passwords.json.generated`.
-
 > Do **not** paste the forwarded URL into a browser by hand. A Codespaces
-> forwarded hostname only resolves once something is actually listening on that
-> port - typing it early gives `DNS_PROBE_FINISHED_NXDOMAIN`. Always click
-> through from the Ports tab.
+> forwarded hostname only resolves once something is listening on that port -
+> typing it early gives `DNS_PROBE_FINISHED_NXDOMAIN`. Always click through
+> from the Ports tab.
+
+---
+
+## Logging in
+
+Username is **`admin`**. The password is randomly generated on **every**
+Airflow startup by the simple auth manager.
+
+Open a **second** terminal (the first is busy running Airflow) and run:
+
+```bash
+airflow-creds
+```
+
+That prints every username and password. It is a shortcut for:
+
+```bash
+cat $AIRFLOW_HOME/simple_auth_manager_passwords.json.generated
+```
+
+The password is also printed in the `airflow standalone` output:
+
+```
+Password for user 'admin': <password>
+```
+
+### Pin a fixed password
+
+The JSON file is authoritative - edit it and restart:
+
+```bash
+echo '{"admin": "admin"}' > $AIRFLOW_HOME/simple_auth_manager_passwords.json.generated
+```
+
+Then `Ctrl+C` and `airflow standalone` again. Login becomes `admin` / `admin`.
+
+Related settings:
+
+| Option | Environment variable |
+|---|---|
+| `core.simple_auth_manager_passwords_file` | `AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE` |
+| `core.simple_auth_manager_users` | `AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS` |
+
+`simple_auth_manager_users` takes comma-separated `username:role` pairs; roles
+are `viewer`, `user`, `op`, `admin`. The simple auth manager is for development
+and testing only - production uses FAB or an external auth manager.
 
 ---
 
 ## One environment, not two
 
 Airflow is installed into the container's Python interpreter rather than a
-separate venv. That means the editor, `pytest`, and the `airflow` CLI all
-resolve the same packages - no unresolved-import squiggles on
+separate venv, so the editor, `pytest`, and the `airflow` CLI all resolve the
+same packages - no unresolved-import squiggles on
 `from airflow.sdk import dag, task`.
+
+Always invoke pytest as `python -m pytest`. Bare `pytest` resolves to the
+devcontainer's pipx-installed copy, which is a different interpreter.
 
 Airflow 3 defaults to `LocalExecutor`, so fan-out and dynamic task mapping run
 genuinely in parallel here. The old SequentialExecutor bottleneck does not
@@ -46,11 +92,12 @@ apply.
 |---|---|
 | Start Airflow | `airflow standalone` |
 | Stop | `Ctrl+C` |
+| Show UI credentials | `airflow-creds` |
 | Hard reset (wipes metadata DB) | `rm -rf .airflow && airflow standalone` |
 | List DAGs | `airflow dags list` |
 | Parse-check one DAG | `python dags/01_taskflow_etl.py` |
 | Test a single task | `airflow tasks test taskflow_etl create_customer 2026-01-01` |
-| Run tests | `pytest tests/ -v` |
+| Run tests | `python -m pytest tests/ -v` |
 | Lint | `ruff check dags/ --select AIR3` |
 
 ---
@@ -61,6 +108,7 @@ apply.
 dags/        DAG definitions - wiring only, no business logic
 include/     Business logic. Not parsed by Airflow, so unit-testable
 tests/       pytest suite, runs in CI on every push
+scripts/     Dev helpers
 Dockerfile   Unused here; kept for the optional Docker path
 ```
 
@@ -86,6 +134,8 @@ Airflow 2 reached end of life on **22 April 2026**. These are hard errors now:
 | `from airflow import DAG` | `from airflow.sdk import DAG` |
 | `from airflow.operators.python import ...` | `from airflow.providers.standard.operators.python import ...` |
 | `catchup=True` default | `catchup=False` default |
+| `from airflow.models import DagBag` | `from airflow.dag_processing.dagbag import DagBag` |
+| `DagBag(include_examples=False)` | kwarg removed - use `AIRFLOW__CORE__LOAD_EXAMPLES=False` |
 
 Also changed: `logical_date` now equals `run_after`, **not**
 `data_interval_start`. For incremental loads always use `data_interval_start`
