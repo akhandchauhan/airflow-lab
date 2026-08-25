@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW_HOME: ${{ github.workspace }}/.airflow
     steps:
       - uses: actions/checkout@v4
 
@@ -31,14 +32,19 @@ jobs:
       - name: DAG integrity tests
         run: uv run pytest tests/ -v --tb=long
 
-      # Surfaces the failure in the run summary so it is readable without
-      # downloading the raw log.
-      - name: Failure summary
+      # Surface the traceback as a check annotation AND in the run summary,
+      # so the failure is readable without downloading the raw log archive.
+      - name: Annotate failure
         if: failure()
         run: |
+          OUT="$(uv run pytest tests/ --tb=short -q 2>&1 | tail -c 4000 || true)"
           {
             echo '## pytest failure'
             echo '```'
-            uv run pytest tests/ --tb=long -q 2>&1 | tail -60
+            echo "$OUT"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          OUT="${OUT//'%'/'%25'}"
+          OUT="${OUT//$'\n'/'%0A'}"
+          OUT="${OUT//$'\r'/'%0D'}"
+          echo "::error title=pytest::${OUT}"

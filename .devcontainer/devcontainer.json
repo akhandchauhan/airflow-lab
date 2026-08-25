@@ -8,9 +8,12 @@
     "storage": "32gb"
   },
 
-  "remoteEnv": {
-    "PATH": "${containerEnv:PATH}:/home/vscode/.local/bin",
-    "AIRFLOW__CORE__LOAD_EXAMPLES": "False"
+  // containerEnv (not remoteEnv) so lifecycle scripts see these too.
+  "containerEnv": {
+    "AIRFLOW_HOME": "${containerWorkspaceFolder}/.airflow",
+    "AIRFLOW__CORE__DAGS_FOLDER": "${containerWorkspaceFolder}/dags",
+    "AIRFLOW__CORE__LOAD_EXAMPLES": "False",
+    "PYTHONPATH": "${containerWorkspaceFolder}"
   },
 
   "postCreateCommand": "bash .devcontainer/setup.sh",
@@ -28,13 +31,13 @@
       "extensions": [
         "ms-python.python",
         "charliermarsh.ruff",
-        "ms-python.mypy-type-checker",
         "redhat.vscode-yaml"
       ],
       "settings": {
-        "editor.formatOnSave": true,
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
         "python.testing.pytestEnabled": true,
-        "python.testing.pytestArgs": ["tests"]
+        "python.testing.pytestArgs": ["tests"],
+        "editor.formatOnSave": true
       }
     }
   }

@@ -1,50 +1,42 @@
 # airflow-lab
 
 Apache **Airflow 3.3** learning lab. Runs in a free GitHub Codespace with no
-Docker, no local install, and no cloud spend.
+Docker and no cloud spend.
 
 ---
 
 ## Launch
 
-1. Click **Code ▾ → Codespaces → Create codespace on main**
-2. Wait ~2 min while `.devcontainer/setup.sh` installs `uv` and the Astro CLI
-3. In the Codespace terminal:
+1. **Code ▾ → Codespaces → Create codespace on main**
+2. Wait ~3 min while `.devcontainer/setup.sh` pip-installs Airflow
+3. In the terminal:
 
    ```bash
-   astro dev start
+   airflow standalone
    ```
 
-4. Accept the port-8080 forward prompt. Login credentials print to the terminal.
+4. Open the **Ports** tab → click the globe icon on port **8080**
 
-First `astro dev start` takes 2-3 minutes while uv resolves Airflow. Later
-starts are seconds.
+Username is `admin`. The password prints to the terminal and is also written to
+`$AIRFLOW_HOME/simple_auth_manager_passwords.json.generated`.
+
+> Do **not** paste the forwarded URL into a browser by hand. A Codespaces
+> forwarded hostname only resolves once something is actually listening on that
+> port - typing it early gives `DNS_PROBE_FINISHED_NXDOMAIN`. Always click
+> through from the Ports tab.
 
 ---
 
-## Why standalone mode
+## One environment, not two
 
-`astro config set dev.mode standalone` (already applied by the setup script)
-runs Airflow in a uv venv backed by SQLite instead of a five-container Docker
-stack.
+Airflow is installed into the container's Python interpreter rather than a
+separate venv. That means the editor, `pytest`, and the `airflow` CLI all
+resolve the same packages - no unresolved-import squiggles on
+`from airflow.sdk import dag, task`.
 
-| | Standalone | Docker mode |
-|---|---|---|
-| RAM | ~1.5 GB | ~5 GB |
-| Fits free 2-core Codespace | yes | tight |
-| Cold start | seconds | ~60 s |
-| Parallel task execution | **yes** (LocalExecutor) | yes |
-| Postgres metadata DB | no (SQLite) | yes |
-| DockerOperator / KubernetesPodOperator | no | yes |
-
-Airflow 3 defaults to `LocalExecutor`, so fan-out and dynamic task mapping
-execute genuinely in parallel here - the old SequentialExecutor bottleneck
-does not apply.
-
-To switch to the full container stack later, bump `hostRequirements.cpus` to
-`4` in `.devcontainer/devcontainer.json`, add the
-`ghcr.io/devcontainers/features/docker-in-docker:2` feature, and drop the
-`astro config set` line from the setup script.
+Airflow 3 defaults to `LocalExecutor`, so fan-out and dynamic task mapping run
+genuinely in parallel here. The old SequentialExecutor bottleneck does not
+apply.
 
 ---
 
@@ -52,13 +44,14 @@ To switch to the full container stack later, bump `hostRequirements.cpus` to
 
 | Action | Command |
 |---|---|
-| Start | `astro dev start` |
-| Stop | `astro dev stop` |
-| Hard reset (wipes metadata DB) | `astro dev kill` |
-| Airflow CLI | `astro dev run dags list` |
-| Run tests | `uv run pytest tests/ -q` |
-| Lint | `uv run ruff check dags/ --select AIR3` |
-| Custom port | `astro dev start --port 8081` |
+| Start Airflow | `airflow standalone` |
+| Stop | `Ctrl+C` |
+| Hard reset (wipes metadata DB) | `rm -rf .airflow && airflow standalone` |
+| List DAGs | `airflow dags list` |
+| Parse-check one DAG | `python dags/01_taskflow_etl.py` |
+| Test a single task | `airflow tasks test taskflow_etl create_customer 2026-01-01` |
+| Run tests | `pytest tests/ -v` |
+| Lint | `ruff check dags/ --select AIR3` |
 
 ---
 
@@ -68,8 +61,7 @@ To switch to the full container stack later, bump `hostRequirements.cpus` to
 dags/        DAG definitions - wiring only, no business logic
 include/     Business logic. Not parsed by Airflow, so unit-testable
 tests/       pytest suite, runs in CI on every push
-plugins/     Custom operators, hooks, macros
-Dockerfile   Pins the Airflow version (standalone reads only the FROM line)
+Dockerfile   Unused here; kept for the optional Docker path
 ```
 
 ---
@@ -97,16 +89,14 @@ Airflow 2 reached end of life on **22 April 2026**. These are hard errors now:
 
 Also changed: `logical_date` now equals `run_after`, **not**
 `data_interval_start`. For incremental loads always use `data_interval_start`
-and `data_interval_end`, never `logical_date` and never `datetime.now()`.
+and `data_interval_end` - never `logical_date`, never `datetime.now()`.
 
 ---
 
 ## Cost
 
-Everything here stays inside free quotas.
-
-- Codespaces: 2-core burns 2 core-hours per wall-clock hour
-- Idle timeout is 30 min; `astro dev start` keeps the machine active, so
-  **stop the codespace when you finish**, don't just close the tab
-- Stopped codespaces still consume the storage quota - delete ones you're done with
+- Codespaces 2-core burns 2 core-hours per wall-clock hour
+- `airflow standalone` keeps the machine active, so the 30-min idle timeout
+  will **not** fire while it runs - stop the codespace explicitly when done
+- Stopped codespaces still consume the storage quota; delete ones you're finished with
 - Public repo, so GitHub Actions minutes are free and unmetered
