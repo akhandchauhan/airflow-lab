@@ -226,7 +226,7 @@ from airflow.sdk import dag, task         # airflow.sdk = Airflow 3's public aut
 
 
 @dag(
-    dag_id="01_taskflow_foundations",
+    dag_id="taskflow_example",
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),  # tz-aware anchor
     schedule=None,                        # manual trigger only
     catchup=False,
@@ -254,23 +254,52 @@ def pipeline():
 pipeline()                                                  # constructs the DAG. Required.
 ```
 
+This example is a straight line. Your build spec (below) is harder - a diamond.
+
 ---
 
 ## 7. Build spec - you write this (no solution)
 
-Create `dags/01_taskflow_foundations.py`.
+Same concepts (`@task`, `multiple_outputs`, XCom auto-wiring), but a shape you
+have to reason about - a **diamond**, not a straight line, with one task that
+consumes values from two different upstream tasks.
 
-**Requirements:**
-1. A `@dag` named `01_taskflow_foundations`, `schedule=None`, `catchup=False`, tags include `course`, `default_args` with a real `owner` and `retries >= 1`.
-2. `extract` - `@task(multiple_outputs=True)`, returns a dict with at least `source_path: str` and `record_count: int`.
-3. `transform` - takes `source_path` and `record_count` as **named arguments**, prints a message, returns the (possibly adjusted) count as an `int`.
-4. `load` - takes the transformed count, prints `"loaded N rows"`, returns `None`.
-5. Wire by **function calls only** - no `>>`, no `xcom_push`, no `xcom_pull`.
+Create `dags/01_taskflow_foundations.py`, dag_id `01_taskflow_foundations`. A
+daily-sales mini-pipeline.
+
+**Tasks:**
+1. `fetch_orders` - `@task(multiple_outputs=True)`. Return a dict with:
+   - `gross_revenue: float`
+   - `order_count: int`
+   - `currency: str`
+2. `fetch_refunds` - `@task`. Return a single `float`: total refunds for the day. (Not `multiple_outputs` - think about why one value doesn't need it.)
+3. `net_revenue` - `@task`. Takes gross revenue and total refunds, returns `gross - refunds` as a `float`.
+4. `avg_order_value` - `@task`. Takes net revenue and order count, returns `net / order_count` rounded to 2 decimals.
+5. `report` - `@task`. Takes net revenue, average order value, **and** currency, and logs one line like `net 39120.50 USD across 300 orders, AOV 130.40`. Returns `None`.
+
+**The graph you must produce (work out the wiring yourself):**
+
+```
+fetch_orders --+--> net_revenue --+--> avg_order_value --+
+fetch_refunds -+                  +---------------------+--> report
+               (report also needs currency from fetch_orders)
+```
+
+**Constraints - this is where you think:**
+- Only function calls create dependencies. No `>>`, no `xcom_push`/`xcom_pull`.
+- `report` depends on **three** values from **two different tasks** (`net_revenue`, `avg_order_value`, and `currency` from `fetch_orders`). Figure out how to thread `currency` to `report` when `net_revenue` and `avg_order_value` don't carry it.
+- `order_count` is used in two places (`avg_order_value` and the `report` message) - pass the same XComArg to both.
+- All 5 tasks must satisfy the integrity gates (tags, real owner, `retries >= 1` via `default_args`).
 
 **Acceptance criteria:**
+- Graph shows the diamond: both fetches fan into `net_revenue`/onward, and `report` has multiple incoming edges.
+- `airflow dags test 01_taskflow_foundations 2026-01-01` runs all 5 tasks green.
+- The `report` log line shows the right numbers.
 - No `xcom_p` anywhere in the file.
-- Graph view shows `extract -> transform -> load`.
-- On the `extract` task in the UI, two separate XComs `source_path` and `record_count` (proof `multiple_outputs` worked).
+
+**Hints (don't read unless stuck):**
+- An XComArg can be passed to more than one downstream task - reuse `orders["currency"]` and `orders["order_count"]` wherever needed.
+- A returned XComArg is just a value handle; hold it in a variable and pass it into several calls.
 
 ---
 
@@ -296,7 +325,7 @@ scheduler CPU on every parse cycle, forever.
 
 ```bash
 python dags/01_taskflow_foundations.py                        # must parse cleanly
-airflow tasks test 01_taskflow_foundations transform 2026-01-01
+airflow dags test 01_taskflow_foundations 2026-01-01          # runs the whole DAG
 python -m pytest tests/ -v                                    # integrity gates pass
 git add dags/01_taskflow_foundations.py && git commit -m "course: 01 taskflow foundations" && git push
 ```
