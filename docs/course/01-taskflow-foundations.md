@@ -31,6 +31,50 @@ pendulum.datetime(2026, 1, 1, tz="UTC")   # tz-aware instant: midnight 1 Jan 202
 pendulum.duration(minutes=5)              # a span of time (like timedelta, richer)
 ```
 
+### `pendulum.datetime()` parameters and defaults
+
+Same positional order as the stdlib `datetime`:
+
+```
+pendulum.datetime(year, month, day, hour=0, minute=0, second=0, microsecond=0, tz="UTC")
+```
+
+| Position | In the example | Meaning | Default if omitted |
+|---|---|---|---|
+| `year` | `2026` | the year | (required) |
+| `month` | `1` | January (1-12, **not** zero-indexed) | (required) |
+| `day` | `1` | 1st of the month (1-31) | (required) |
+| `hour` | omitted | hour of day (0-23) | `0` |
+| `minute` | omitted | minute | `0` |
+| `second` | omitted | second | `0` |
+| `microsecond` | omitted | microsecond | `0` |
+| `tz` | `"UTC"` | timezone (keyword arg) | `"UTC"` |
+
+So `pendulum.datetime(2026, 1, 1, tz="UTC")` passes only the first three
+positionals; hour/minute/second default to `0`, giving **midnight**:
+
+```
+2026-01-01 00:00:00+00:00      # the +00:00 offset is the "aware" part
+```
+
+Examples with a time component:
+
+```python
+pendulum.datetime(2026, 1, 1, 1, tz="UTC")        # 4th positional = hour -> 01:00
+pendulum.datetime(2026, 1, 1, 13, 30, tz="UTC")   # 1:30 PM -> 13:30:00
+```
+
+For a DAG's `start_date` you almost always want the clean start of a day, so the
+midnight form (first three args only) is the normal choice - you rarely set
+hours/minutes on a `start_date`.
+
+Verify:
+
+```bash
+python -c "import pendulum; print(repr(pendulum.datetime(2026, 1, 1, tz='UTC')))"
+# DateTime(2026, 1, 1, 0, 0, 0, tzinfo=Timezone('UTC'))
+```
+
 A pendulum `DateTime` **subclasses** the stdlib `datetime`, so anywhere Airflow
 expects a datetime, pendulum works. It flows the other way too: the values
 Airflow injects into your tasks - `data_interval_start`, `logical_date` - **are
