@@ -302,3 +302,67 @@ git add dags/01_taskflow_foundations.py && git commit -m "course: 01 taskflow fo
 ```
 
 Done when CI is green. Tick session 01 in `docs/course/README.md`.
+
+---
+
+## 10. Why `print()` shows up in the logs (no import needed)
+
+You used `print("loaded ...")` and it appeared in the UI Logs tab as
+`INFO - loaded 4213 rows` - without importing anything. Here's why.
+
+`print()` writes to **stdout** (the process's standard output stream). Normally
+that goes to a terminal, but Airflow does not run your task in a terminal - it
+wraps the task's execution and **redirects stdout/stderr to the task's logger**.
+That logger has a handler that writes to the per-task log file, which is what the
+UI reads.
+
+```
+your code:      print("loaded 4213 rows")
+                        | writes to stdout
+Airflow wrapper:  captures stdout, feeds each line to the task logger
+                        | logger formats it
+log file:       [2026-08-30 11:34:55] INFO - loaded 4213 rows
+                        |
+UI Logs tab:    renders the file
+```
+
+**The `INFO` and timestamp are not yours.** `print` outputs only the raw text
+`loaded 4213 rows`. Airflow's log formatter adds the `INFO` level and the
+timestamp when it captures the line. Captured stdout is always tagged **INFO**
+(stderr -> ERROR).
+
+**Is `logging` built in? Yes.** Python's `logging` module is part of the
+**standard library** - always present, no `pip install`. You did not import it
+because you used `print`; Airflow itself imports and configures `logging`
+(handlers, formatters, per-task file routing) at startup, and you inherit that.
+
+**Other lines Airflow adds around every task:**
+
+| Line | Who wrote it |
+|---|---|
+| `Log message source details`, `Pre Execute`, `Post Execute` | Airflow lifecycle markers |
+| `loaded 4213 rows` | your `print()` |
+| `Done. Returned value was: None` | Airflow logging the task's return value |
+
+### Production tip - use a logger, not `print`
+
+`print` works via stdout capture, but real tasks use the standard logger:
+
+```python
+import logging
+
+log = logging.getLogger(__name__)
+
+@task
+def load(row_count: int) -> None:
+    log.info("loaded %s rows", row_count)      # proper level
+    log.warning("row count below threshold")   # impossible with print
+```
+
+Why better:
+- **Levels** - `print` is always INFO; a logger emits WARNING/ERROR, which you can filter in the UI "All Log Levels" dropdown and alert on.
+- **Structured** - `log.info("loaded %s rows", n)` defers formatting and works with remote/structured logging (S3/Elasticsearch) in production.
+- **No stdout dependency** - goes straight to the logger.
+
+`print` is fine for learning; switch to `logging.getLogger(__name__)` for
+anything real.
