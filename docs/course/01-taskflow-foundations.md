@@ -1,47 +1,197 @@
 # Session 01 - W1 Sat - TaskFlow Foundations
 
-**Goal:** author a DAG entirely with `@dag` / `@task`, where XCom is implicit -
-return values flow as function arguments, and `multiple_outputs` splits a dict
-into separately-addressable XComs.
+**Goal:** author a DAG entirely with `@dag` / `@task`, understand the machinery
+underneath (parse-time vs run-time, what an `XComArg` really is), and use
+`multiple_outputs` to split a returned dict into separate XComs.
 
 ---
 
-## 1. Concept
+## 0. The library you didn't recognize: `pendulum`
 
-TaskFlow is the decorator-based authoring style. You write plain Python
-functions; Airflow turns each into a task and wires the data flow for you.
+**What it is:** a third-party Python library for dates and times - a near
+drop-in replacement for the standard library's `datetime`.
 
-- A `@task` function's **return value is auto-pushed to XCom** (key `return_value`).
-- **Passing that return as an argument to another `@task` auto-pulls it** and creates the dependency. You never call `xcom_push` / `xcom_pull`.
-- `multiple_outputs=True` on a task that returns a `dict` stores **each key as its own XCom**, so downstream tasks can take just the keys they need.
+**The problem it solves.** Python's built-in `datetime` objects come in two forms:
 
-Reach for TaskFlow whenever the work is Python and you're moving small values
-between steps. Drop to classic operators only for non-Python work (Bash, SQL,
-containers) or when an operator has no decorator form.
+- **naive** - no timezone (`datetime(2026, 1, 1)`). Python can't tell if that's 1 AM in Delhi or 1 AM in New York.
+- **aware** - carries a timezone (`datetime(2026, 1, 1, tzinfo=timezone.utc)`).
 
----
+Airflow's whole job is scheduling across time - intervals, cron, daylight-saving
+shifts, backfills over months. A naive datetime silently assumes some local time
+and creates off-by-hours bugs that only appear in production. So Airflow
+**standardizes on pendulum**, which is timezone-aware by default and refuses to
+be ambiguous.
 
-## 2. API + example
+**What you actually use:**
 
 ```python
-from __future__ import annotations
+import pendulum
+
+pendulum.datetime(2026, 1, 1, tz="UTC")   # tz-aware instant: midnight 1 Jan 2026 UTC
+pendulum.duration(minutes=5)              # a span of time (like timedelta, richer)
+```
+
+A pendulum `DateTime` **subclasses** the stdlib `datetime`, so anywhere Airflow
+expects a datetime, pendulum works. It flows the other way too: the values
+Airflow injects into your tasks - `data_interval_start`, `logical_date` - **are
+pendulum objects**, so methods like `.to_date_string()` -> `"2026-01-01"` or
+`.add(days=1)` are available on them. That is why learning it now pays off for
+the whole course.
+
+You *could* use stdlib `datetime` with an explicit UTC tzinfo and it would run.
+Pendulum is the convention, and the context objects are pendulum anyway, so use
+it.
+
+---
+
+## 1. The core idea: when does my code actually run?
+
+This is the thing that makes TaskFlow click. Your DAG file lives in **two time
+worlds**, and the same code means different things in each.
+
+```
+  PARSE TIME                              RUN TIME
+  (DAG Processor, every ~30s)            (a Worker, when a task is scheduled)
+  --------------------------            ----------------------------------
+  imports your .py file                  runs the BODY of ONE @task function
+  runs top-level code                    e.g. the actual `return {...}`
+  runs the @dag function body            produces real values
+  -> builds the DAG graph                reads/writes XCom rows
+  -> NO task bodies execute here
+```
+
+At parse time Airflow is **constructing a graph**, not doing your work. Task
+function bodies do not run here - they run later, one at a time, on workers.
+Hold that split; everything below follows from it.
+
+---
+
+## 2. What `@dag` actually does
+
+`@dag` turns your `pipeline` function into a **DAG factory**. Decorating it
+builds nothing. The DAG is constructed only when you **call** `pipeline()` - the
+last line of the file. That call runs the function body once, at parse time, and
+the calls inside it register the graph.
+
+Forget the final `pipeline()` call -> no DAG object is created -> it never shows
+up in Airflow. (The #1 "my DAG isn't appearing" cause.)
+
+---
+
+## 3. What `@task` does - and why `data` is not a dict
+
+The part that looks like magic. Inside the `@dag` body:
+
+```python
+data = extract()
+```
+
+You'd expect `extract()` to run `return {...}` and give you a dict. **It does
+not.** A `@task`-decorated function is no longer a normal function. Calling it at
+parse time does two things:
+
+1. **Registers a task node** named `extract` in the DAG graph.
+2. **Returns an `XComArg`** - a lazy placeholder meaning *"the future output of
+   the extract task."*
+
+So `data` is an `XComArg`, a handle to a value that does not exist yet. No dict
+has been produced, because `extract`'s body has not run - and won't until a
+worker executes it.
+
+Then:
+
+```python
+transform(path=data["path"], rows=data["rows"])
+```
+
+- `data["path"]` returns **another XComArg** - a sub-reference to the `"path"`
+  key of extract's future output.
+- Passing those XComArgs into `transform` tells Airflow two things at once:
+  - **dependency:** `transform` needs `extract`'s output -> draw edge `extract -> transform`.
+  - **wiring:** at run time, pull `extract`'s XCom, take those keys, feed them in.
+
+That is why TaskFlow needs no `>>` and no `xcom_push`/`xcom_pull`: **a data
+dependency IS the task dependency.** Airflow reads ordinary-looking function
+composition and reinterprets it as graph construction + XCom plumbing. The
+official name is **functional DAG building**.
+
+---
+
+## 4. The XComArg -> value handoff (granular)
+
+Trace one value, `path`, from definition to consumption. Watch which world each
+step lives in.
+
+```
+DEFINITION (parse time)                       what `path` is
+---------------------------------------       -------------------------------
+data = extract()                              data = XComArg(extract)
+                                              (placeholder: "extract's output")
+
+p = data["path"]                              p    = XComArg(extract)["path"]
+                                              (placeholder: the 'path' key of it)
+
+transform(path=p, rows=...)                   registers edge extract -> transform,
+                                              records "arg 'path' <- that XComArg"
+                                              NOTHING has executed yet
+===============================================================================
+EXECUTION (run time, later, on workers)       what `path` is
+---------------------------------------       -------------------------------
+1. worker runs extract()                      returns {"path": "...", "rows": 4213}
+2. Airflow writes XCom rows:                  DB row: (dag, run, task=extract,
+     multiple_outputs -> one row per key          key="path", value="gs://...")
+                                              DB row: (..., key="rows", value=4213)
+3. transform is scheduled; Airflow            reads XCom row key="path",
+   resolves each XComArg arg:                     deserializes -> "gs://..."
+4. calls transform(path="gs://...",           path = "gs://..."  (real str!)
+                    rows=4213)                 the XComArg is gone; only the value
+```
+
+The one-line rule: **XComArg at definition time -> real value at run time.**
+The placeholder exists only to build the graph and record the wiring; by the
+time your `transform` body runs, `path` is a plain `str`.
+
+Where the values physically live: the `xcom` table in the metadata database,
+keyed by `(dag_id, run_id, task_id, map_index, key)`. That composite key is why
+XCom is scoped to one DAG + one run - task B in today's run cannot read task A's
+value from yesterday's.
+
+---
+
+## 5. `multiple_outputs` precisely
+
+- **Without it:** whatever you return is stored as **one** XCom value. A returned
+  dict comes back whole; you subscript it *after* it is pulled.
+- **With it (`multiple_outputs=True`):** Airflow iterates the returned dict and
+  stores **each key as its own XCom**, and the returned XComArg supports
+  `["key"]` at definition time to reference each one. Valid only when the
+  function genuinely returns a dict - annotate `-> dict` so it is obvious.
+
+Why care: a downstream task can depend on *just* `path` without dragging the
+whole payload through, and each value is separately inspectable in the UI.
+
+---
+
+## 6. API + example (every line, knowing what it means)
+
+```python
+from __future__ import annotations       # lets you write `-> dict` etc. cleanly
 
 import pendulum
-from airflow.sdk import dag, task
+from airflow.sdk import dag, task         # airflow.sdk = Airflow 3's public authoring API
 
 
 @dag(
     dag_id="01_taskflow_foundations",
-    start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
-    schedule=None,
+    start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),  # tz-aware anchor
+    schedule=None,                        # manual trigger only
     catchup=False,
     tags=["course", "w1", "taskflow"],
-    default_args={"owner": "akhand", "retries": 2},
+    default_args={"owner": "akhand", "retries": 2},      # applied to every task
 )
 def pipeline():
     @task(multiple_outputs=True)
     def extract() -> dict:
-        # each key becomes its own XCom
         return {"path": "gs://lake/raw/2026-01-01/", "rows": 4213}
 
     @task
@@ -53,61 +203,57 @@ def pipeline():
     def load(row_count: int) -> None:
         print(f"loaded {row_count} rows")
 
-    data = extract()
-    load(transform(path=data["path"], rows=data["rows"]))
+    data = extract()                                        # XComArg, not a dict
+    load(transform(path=data["path"], rows=data["rows"]))   # builds edges + wiring
 
 
-pipeline()
+pipeline()                                                  # constructs the DAG. Required.
 ```
-
-`data["path"]` and `data["rows"]` work **because** of `multiple_outputs=True` -
-without it, `extract` returns one XCom (the whole dict) and you'd subscript it
-downstream instead.
 
 ---
 
-## 3. Build spec - you write this (no solution)
+## 7. Build spec - you write this (no solution)
 
 Create `dags/01_taskflow_foundations.py`.
 
 **Requirements:**
-1. A `@dag` named `01_taskflow_foundations`, `schedule=None`, `catchup=False`, tags include `course`, `default_args` with a real `owner` and `retries>=1`.
+1. A `@dag` named `01_taskflow_foundations`, `schedule=None`, `catchup=False`, tags include `course`, `default_args` with a real `owner` and `retries >= 1`.
 2. `extract` - `@task(multiple_outputs=True)`, returns a dict with at least `source_path: str` and `record_count: int`.
 3. `transform` - takes `source_path` and `record_count` as **named arguments**, prints a message, returns the (possibly adjusted) count as an `int`.
 4. `load` - takes the transformed count, prints `"loaded N rows"`, returns `None`.
-5. Wire them by **function calls only** - no `>>`, no `xcom_push`, no `xcom_pull`.
+5. Wire by **function calls only** - no `>>`, no `xcom_push`, no `xcom_pull`.
 
 **Acceptance criteria:**
-- `grep -r "xcom_p" dags/01_taskflow_foundations.py` -> no matches.
+- No `xcom_p` anywhere in the file.
 - Graph view shows `extract -> transform -> load`.
-- Grid view shows separate XComs `source_path` and `record_count` on the `extract` task.
+- On the `extract` task in the UI, two separate XComs `source_path` and `record_count` (proof `multiple_outputs` worked).
 
 ---
 
-## 4. Production tip - top-level code
+## 8. Production tip - top-level code
 
-Everything at **module scope re-runs on every DAG parse** (~every 30s per file).
-Keep module scope to imports, the `@dag` definition, and the final `pipeline()`
-call. Put heavy imports (pandas, requests, cloud SDKs) **inside** the task body:
+Everything at **module scope re-runs on every parse** (~30s per file), because
+parse time imports the whole module. Keep heavy imports inside task bodies so
+they cost nothing until the task runs:
 
 ```python
 @task
 def transform(path: str):
-    import pandas as pd   # loaded only when the task runs, not on every parse
+    import pandas as pd   # runs on a worker, not on every parse cycle
     ...
 ```
 
-A top-level `import pandas` or, worse, an API call at module scope steals
-scheduler CPU on every parse cycle forever.
+A top-level `import pandas` - or worse, an API/DB call at module scope - steals
+scheduler CPU on every parse cycle, forever.
 
 ---
 
-## 5. Verify + commit
+## 9. Verify + commit
 
 ```bash
-python dags/01_taskflow_foundations.py                       # parses, no error
+python dags/01_taskflow_foundations.py                        # must parse cleanly
 airflow tasks test 01_taskflow_foundations transform 2026-01-01
-python -m pytest tests/ -v                                   # integrity gates pass
+python -m pytest tests/ -v                                    # integrity gates pass
 git add dags/01_taskflow_foundations.py && git commit -m "course: 01 taskflow foundations" && git push
 ```
 
