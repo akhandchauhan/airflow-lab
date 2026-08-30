@@ -120,6 +120,30 @@ the calls inside it register the graph.
 Forget the final `pipeline()` call -> no DAG object is created -> it never shows
 up in Airflow. (The #1 "my DAG isn't appearing" cause.)
 
+### Do we really need `pipeline()`? Yes.
+
+Without the call, the module contains a function *definition* but **no DAG
+object** in its namespace. The DAG Processor's DagBag scans module globals for
+DAG instances, finds none, and the DAG silently never appears - no error, just
+absent.
+
+Contrast with the classic style (`my_first_dag.py`):
+
+```python
+dag = DAG(dag_id="my_first_dag", ...)   # DAG object created immediately at import
+```
+
+Here `DAG(...)` is instantiated directly at module level, so the object exists
+the moment the file is imported - no extra call needed.
+
+| Style | What creates the DAG object | Extra call needed? |
+|---|---|---|
+| Classic - `dag = DAG(...)` | the `DAG(...)` call at module level | No |
+| TaskFlow - `@dag def pipeline()` | calling `pipeline()` | **Yes** |
+
+Rule of thumb: **a `@dag`-decorated function must be called at the bottom of the
+file.**
+
 ---
 
 ## 3. What `@task` does - and why `data` is not a dict
