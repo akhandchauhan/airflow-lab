@@ -144,6 +144,10 @@ the moment the file is imported - no extra call needed.
 Rule of thumb: **a `@dag`-decorated function must be called at the bottom of the
 file.**
 
+The function name (`pipeline`) is arbitrary - call it anything; only the
+`dag_id` in the decorator is the DAG's real identity (and if you omit `dag_id`,
+the function name becomes it).
+
 ---
 
 ## 3. What `@task` does - and why `data` is not a dict
@@ -419,3 +423,46 @@ Why better:
 
 `print` is fine for learning; switch to `logging.getLogger(__name__)` for
 anything real.
+
+---
+
+## 11. What is a DagBag?
+
+A **DagBag is the in-memory collection of all DAGs parsed from a folder.** It
+takes a directory, imports every `.py` file in it, scans each module's global
+namespace for `DAG` objects, and collects them into a dictionary.
+
+```
+dags/ folder                    DagBag object
+--------------                  ------------------------------
+my_first_dag.py       -+        .dags = {
+task_1_foundations.py  +-import->   "my_first_dag": <DAG>,
+...                   -+            "01_taskflow_foundations": <DAG>,
+                                }
+                                .dag_ids       = ["my_first_dag", "01_...", ...]
+                                .import_errors = {}   # files that failed to parse
+```
+
+Key attributes:
+
+| Attribute | What it holds |
+|---|---|
+| `.dags` | dict of `dag_id -> DAG object` |
+| `.dag_ids` | list of all discovered dag_ids |
+| `.import_errors` | dict of `filepath -> error` for files that failed to parse |
+| `.get_dag(dag_id)` | fetch one DAG (refreshes from metadata DB - needs a migrated DB) |
+
+**Where it is used:**
+
+- The **DAG Processor** builds a DagBag every scan cycle to discover your DAGs.
+  This is exactly how `pipeline()`'s result gets found: it scans module globals,
+  so no call -> no DAG in globals -> not in the DagBag -> invisible in the UI.
+- The **integrity test** (`tests/dags/test_dag_integrity.py`) builds its own
+  DagBag to check every DAG parses:
+
+  ```python
+  DAG_BAG = DagBag(dag_folder="dags/", bundle_path=REPO_ROOT)
+  assert not DAG_BAG.import_errors
+  ```
+
+So "DagBag" is literal: the bag of DAGs Airflow found in a folder.
