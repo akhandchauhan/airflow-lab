@@ -21,8 +21,10 @@ with DAG(
     load = EmptyOperator(task_id="load")
     notify = EmptyOperator(task_id="notify")
 
+    # method 1
     # extract >> [validate_schema, validate_nulls,
     #             validate_ranges] >> load >> notify
 
+    # method 2
     chain(extract, [validate_schema, validate_nulls,
           validate_ranges], load, notify)
