@@ -1,0 +1,15 @@
+# Ruff configuration for the airflow-lab repo.
+# CI runs: ruff check dags/ include/ tests/ --select E,F,AIR3
+# The command-line --select overrides the [lint] select below; line-length
+# (top-level) is always respected, including by CI. 88 is ruff's default and
+# too strict for readable DAG f-strings, so we use 120.
+
+line-length = 120
+target-version = "py312"
+
+[lint]
+# Kept in sync with CI so local `ruff check` matches:
+#   E     - pycodestyle errors (incl. E501 line-too-long)
+#   F     - pyflakes (unused imports, undefined names)
+#   AIR3  - Airflow 3 migration / deprecation rules
+select = ["E", "F", "AIR3"]
