@@ -9,6 +9,7 @@ from airflow.sdk import task, dag
     start_date=pendulum.datetime(2026, 8, 30, tz='UTC'),
     catchup=False,
     schedule=None,
+    tags=["course", "w1", "taskflow"],
     default_args={"owner": "panda singh", "retries": 2},
 )
 def pipeline():
@@ -26,13 +27,13 @@ def pipeline():
 
     @task
     def avg_order_value(net_rev: float, order_cnt: int) -> float:
-        return round(net_rev/order_cnt, 2)
+        return round(net_rev / order_cnt, 2)
 
     @task
     def report(net_rev: float, avg_order_val: float, currency: str) -> None:
         print(
-            f"net revenue = {net_rev}{currency}, acrosss 300 orders, aov ={avg_order_val}")
-        return None
+            f"net revenue = {net_rev} {currency}, across {order_info['order_count']} orders, aov = {avg_order_val}"
+        )
 
     order_info = fetch_orders()
     refund_cnt = fetch_refunds()
