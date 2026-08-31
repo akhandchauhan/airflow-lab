@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pendulum
-from airflow.sdk import DAG, chain
+from airflow.sdk import DAG
 from airflow.providers.standard.operators.empty import EmptyOperator
 
 

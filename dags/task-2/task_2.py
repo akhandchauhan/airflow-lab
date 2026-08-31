@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pendulum
-from airflow.sdk import DAG, chain
+from airflow.sdk import DAG, chain, cross_downstream
 from airflow.providers.standard.operators.empty import EmptyOperator
 
 
@@ -28,3 +28,18 @@ with DAG(
     # method 2
     chain(extract, [validate_schema, validate_nulls,
           validate_ranges], load, notify)
+
+    # Version C tasks
+    extract_c = EmptyOperator(task_id="extract_c")
+    vs_c = EmptyOperator(task_id="validate_schema_c")
+    vn_c = EmptyOperator(task_id="validate_nulls_c")
+    vr_c = EmptyOperator(task_id="validate_ranges_c")
+    load_c = EmptyOperator(task_id="load_c")
+    notify_c = EmptyOperator(task_id="notify_c")
+
+    validators_c = [vs_c, vn_c, vr_c]
+    # extract → all validators (fan-out)
+    cross_downstream([extract_c], validators_c)
+    # all validators → load (fan-in)
+    cross_downstream(validators_c, [load_c])
+    chain(load_c, notify_c)                        # load → notify (the tail)
