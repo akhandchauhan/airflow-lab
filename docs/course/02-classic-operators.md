@@ -182,18 +182,66 @@ Without `end`, you'd draw three edges into whatever came next; with it, one.
 
 ---
 
-## 8. Classic vs TaskFlow - when to use which
+## 8. Classic vs TaskFlow - the full difference
 
-| | TaskFlow (`@task`) | Classic (operators) |
+Both build the **same thing** - a DAG of tasks with dependencies. They differ in
+*how you express it*. The two styles are two syntaxes over one engine, not two
+engines.
+
+### Side by side - the same pipeline in both styles
+
+```python
+# ---- TaskFlow style ----                    # ---- Classic style ----
+@task                                          def _extract(**context):
+def extract() -> str:                              return "/raw/2026-01-01/"
+    return "/raw/2026-01-01/"
+                                               def _load(path, **context):
+@task                                              print(f"loading {path}")
+def load(path: str) -> None:
+    print(f"loading {path}")                   extract = PythonOperator(
+                                                   task_id="extract",
+load(extract())                                    python_callable=_extract,
+#  ^ one line:                                  )
+#    - creates both tasks                       load = PythonOperator(
+#    - draws extract -> load                        task_id="load",
+#    - passes the path via XCom                      python_callable=_load,
+                                                   op_kwargs={"path": "..."},  # manual
+                                               )
+                                               extract >> load   # manual edge
+```
+
+Same two-task DAG. TaskFlow's `load(extract())` did in one expression what
+classic style needs three things for: instantiate both operators, wire the edge
+with `>>`, and pass data manually (`op_kwargs` / XCom).
+
+### What actually differs
+
+| Aspect | TaskFlow (`@task` / `@dag`) | Classic (operators + `>>`) |
 |---|---|---|
-| Dependency | implicit - passing data draws the edge | explicit - you write `>>` / `chain` |
-| Data passing | automatic via return values | manual via XCom |
-| Best for | Python logic that moves values | non-Python work (Bash/SQL/containers), or operators with no decorator form |
-| Reads like | function composition | a wiring diagram |
+| **A task is** | a decorated Python function | an operator instance (`PythonOperator(...)`) |
+| **Dependencies** | implicit - passing a return value draws the edge | explicit - you write `>>` / `chain` |
+| **Data passing** | automatic - return value is auto-pushed, argument auto-pulls | manual - `op_kwargs`, `xcom_pull`, templates |
+| **XCom** | hidden behind function calls | you call `ti.xcom_push` / `xcom_pull` yourself |
+| **DAG registration** | must **call** the `@dag` function | `dag = DAG(...)` exists at import |
+| **What it reads like** | function composition | a wiring diagram |
+| **Boilerplate** | low | higher (task_id, callable, wiring all explicit) |
+| **Non-Python work** | limited - Python callables | natural - `BashOperator`, `KubernetesPodOperator`, SQL operators |
 
-They mix freely in one DAG. Rule of thumb: **TaskFlow for Python data flow;
-classic operators for pre-built integrations** (a `BashOperator`, a
-`KubernetesPodOperator`, a SQL operator) where there's no value to thread.
+### The mechanism difference in one line
+
+- **TaskFlow:** *a data dependency IS the task dependency.* You move data; the edge appears.
+- **Classic:** *edges and data are separate.* You draw the edge with `>>`; if data must flow, you push/pull it via XCom yourself.
+
+### Which to use
+
+They mix freely in one DAG (the same file can have both). Rule of thumb:
+
+- **TaskFlow** for Python logic that computes and passes values around - cleaner, less boilerplate, XCom handled for you.
+- **Classic operators** for pre-built integrations where there is no Python value to thread: a `BashOperator` running a script, a `KubernetesPodOperator` running a container, a SQL operator hitting a warehouse. Many of these have no decorator form, so classic is the only option.
+
+A common real-world DAG: TaskFlow `@task`s for the extract/transform Python
+logic, wired with `>>` into a classic `KubernetesPodOperator` or SQL operator for
+the heavy lifting.
 
 ---
 
