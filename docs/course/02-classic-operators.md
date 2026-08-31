@@ -245,7 +245,63 @@ the heavy lifting.
 
 ---
 
-## 9. Build spec - you write this (no solution)
+## 9. A complete classic-style DAG (your reference)
+
+Before the spec - here is a whole runnable classic-style file, end to end, so you
+have the full shape (not just fragments). This is **not** the spec answer; it's a
+smaller, different graph to copy the structure from.
+
+```python
+from __future__ import annotations
+
+import pendulum
+from airflow.sdk import DAG, chain
+from airflow.providers.standard.operators.empty import EmptyOperator
+
+with DAG(
+    dag_id="classic_style_demo",
+    start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
+    schedule=None,
+    catchup=False,
+    tags=["course", "demo"],
+    default_args={"owner": "akhand", "retries": 2},
+) as dag:
+
+    # 1. Instantiate operators = create tasks (nodes). EmptyOperator does
+    #    nothing; this DAG is purely about wiring.
+    start = EmptyOperator(task_id="start")
+    job_a = EmptyOperator(task_id="job_a")
+    job_b = EmptyOperator(task_id="job_b")
+    end   = EmptyOperator(task_id="end")
+
+    # 2. Wire the edges explicitly. Two equivalent ways:
+
+    # (a) bitshift - fan-out to a list, then fan-in
+    start >> [job_a, job_b] >> end
+
+    # (b) same graph via chain() - use INSTEAD of (a), not in addition
+    # chain(start, [job_a, job_b], end)
+```
+
+Read the shape:
+
+- `with DAG(...) as dag:` - classic uses the **context manager**, so you don't
+  pass `dag=` to each operator; tasks created inside the `with` auto-attach.
+- Each `EmptyOperator(task_id=...)` line **creates a task** (a node).
+- Wiring is a **separate statement** at the bottom - edges, not data.
+- **No `pipeline()` call** - `DAG(...)` builds the object at import (the
+  classic-vs-TaskFlow difference from Section 2/8).
+
+Run it:
+
+```bash
+python dags/classic_style_demo.py
+airflow dags test classic_style_demo 2026-01-01
+```
+
+---
+
+## 10. Build spec - you write this (no solution)
 
 Create `dags/02_classic_operators.py`, dag_id `02_classic_operators`. Build the
 **same graph three different ways** to feel the difference between the helpers.
@@ -285,7 +341,7 @@ file, but give the tasks distinct `task_id`s per version, e.g. suffix `_a`,
 
 ---
 
-## 10. Production tip - one dependency syntax, repo-wide
+## 11. Production tip - one dependency syntax, repo-wide
 
 Pick **one** wiring style and stick to it across the repo. Mixing `>>`,
 `set_downstream`, `chain`, and `chain_linear` in the same codebase makes graphs
@@ -295,7 +351,7 @@ Readability of the wiring is a real maintenance cost at 100+ DAGs.
 
 ---
 
-## 11. Verify + commit
+## 12. Verify + commit
 
 ```bash
 python dags/02_classic_operators.py
