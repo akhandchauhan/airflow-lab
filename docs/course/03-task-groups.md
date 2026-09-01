@@ -35,7 +35,7 @@ each logical stage into one box.
 
 ## 2. Two ways to make a TaskGroup
 
-### (a) `@task_group` decorator - pairs with TaskFlow
+### (a) `@task_group` decorator - pairs with TaskFlow (what we use)
 
 `from airflow.sdk import task_group`. Decorate a function; every `@task` defined
 and called inside becomes a member of the group.
@@ -57,7 +57,7 @@ def ingest():
 ### (b) `TaskGroup` context manager - pairs with classic operators
 
 `from airflow.sdk import TaskGroup`. Everything created inside the `with` block
-joins the group.
+joins the group. (Shown for awareness - this session builds in TaskFlow.)
 
 ```python
 with TaskGroup(group_id="ingest") as ingest:
@@ -66,8 +66,7 @@ with TaskGroup(group_id="ingest") as ingest:
     download >> stage
 ```
 
-Both produce the same collapsible "ingest" node. Use the decorator with `@task`
-Python logic; use the context manager with classic operators.
+Both produce the same collapsible "ingest" node.
 
 ---
 
@@ -82,37 +81,82 @@ Consequences:
 
 - In `airflow tasks test`, you reference the **full** id: `airflow tasks test <dag> ingest.download 2026-01-01`.
 - The prefix is why you can **reuse the same group definition** for multiple inputs without id collisions.
-- `prefix_group_id=False` on the TaskGroup turns prefixing off (rarely needed; you then must keep ids unique yourself).
+- `prefix_group_id=False` on the group turns prefixing off (rarely needed; you then must keep ids unique yourself).
+
+### Function name vs `group_id`
+
+Like `@dag`/`dag_id`, they are independent:
+
+- The **function name** is a Python label, cosmetic.
+- **`group_id`** is the group's real identity (the prefix on child task ids).
+
+They can differ. And if you omit `group_id`, the **function name becomes it**:
+
+```python
+@task_group(group_id="ingest")
+def whatever():        # function name irrelevant -> prefix is "ingest"
+    ...
+
+@task_group            # no group_id
+def orders():          # function name IS the group_id -> prefix is "orders"
+    ...
+```
+
+Naming them the same (`orders` / `"orders"`) is just readability convention, not
+a requirement.
 
 ---
 
-## 4. Nesting groups
+## 4. Nesting groups (TaskFlow)
 
-Groups nest. A group inside a group prefixes twice:
+Groups nest. A `@task_group` defined inside another `@task_group` prefixes twice:
 
 ```python
-with TaskGroup(group_id="orders") as orders:
-    download = EmptyOperator(task_id="download")     # -> orders.download
-    with TaskGroup(group_id="quality") as quality:
-        check_nulls = EmptyOperator(task_id="check_nulls")  # -> orders.quality.check_nulls
+@task_group(group_id="orders")
+def orders():
+    @task
+    def download() -> str:                     # -> orders.download
+        return "/raw/orders"
+
+    @task_group(group_id="quality")
+    def quality(path: str):
+        @task
+        def check_nulls(p: str) -> str:        # -> orders.quality.check_nulls
+            return p
+
+        @task
+        def check_schema(p: str) -> str:       # -> orders.quality.check_schema
+            return p
+
+        check_nulls(path)
+        check_schema(path)
+
+    quality(download())                        # download's output flows into the nested group
+
+orders()
 ```
 
-The UI shows `orders` collapsing to reveal `download` and a nested `quality` box.
+The id builds up one prefix per nesting level: `orders.quality.check_nulls`. The
+UI shows `orders` collapsing to reveal `download` and a nested `quality` box.
+
+Note the wiring is pure TaskFlow: `quality(download())` passes `download`'s
+XComArg into the nested group, which draws the edge automatically (Session 01) -
+no `>>` needed.
 
 ---
 
 ## 5. Wiring groups together
 
-You set dependencies on **whole groups** just like tasks - `>>` works on a group
-object and wires its boundary tasks:
+You can set dependencies on **whole groups** just like tasks - `>>` works on a
+group object and wires its boundary tasks:
 
 ```python
 start >> group_a >> group_b >> end
 ```
 
-`start >> group_a` means "start before every entry task of group_a"; `group_a >>
-group_b` chains the groups' edges. Inside each group you wire members
-separately.
+In pure TaskFlow you usually wire by **data flow** instead - pass one group's
+output into the next (`stage(validate(download(name)))`), same as tasks. Use `>>`
+on groups only when there's no data to thread.
 
 ### Instantiating the same group many times
 
@@ -124,59 +168,61 @@ for name in ["orders", "users", "products"]:
     ingest.override(group_id=f"ingest_{name}")(name)
 ```
 
-Or, with the context manager, just use an f-string id in a loop:
-
-```python
-for name in ["orders", "users", "products"]:
-    with TaskGroup(group_id=f"ingest_{name}"):
-        ...
-```
-
 ---
 
-## 6. A complete runnable DAG (your reference)
+## 6. A complete runnable DAG (your reference, TaskFlow)
 
-A whole file, end to end, before the spec. One parametrized group, instantiated
-twice, wired between a start and an end marker.
+A whole file, end to end, before the spec. One parametrized `@task_group`,
+instantiated twice with `.override(group_id=...)`.
 
 ```python
 from __future__ import annotations
 
 import pendulum
-from airflow.sdk import DAG, TaskGroup
-from airflow.providers.standard.operators.empty import EmptyOperator
+from airflow.sdk import dag, task, task_group
 
-with DAG(
+
+@dag(
     dag_id="task_group_demo",
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
     schedule=None,
     catchup=False,
     tags=["course", "demo"],
     default_args={"owner": "akhand", "retries": 2},
-) as dag:
+)
+def pipeline():
 
-    start = EmptyOperator(task_id="start")
-    end   = EmptyOperator(task_id="end")
+    @task_group(group_id="ingest")
+    def ingest(name: str) -> None:
+        @task
+        def download(src: str) -> str:         # -> ingest_orders.download
+            return f"/raw/{src}"
 
-    groups = []
+        @task
+        def validate(path: str) -> str:        # -> ingest_orders.validate
+            return path
+
+        @task
+        def stage(path: str) -> None:          # -> ingest_orders.stage
+            print(f"staging {path}")
+
+        stage(validate(download(name)))        # TaskFlow wiring inside the group
+
+    # instantiate the same group per source, distinct group_id each time
     for name in ["orders", "users"]:
-        with TaskGroup(group_id=f"ingest_{name}") as tg:
-            download = EmptyOperator(task_id="download")   # -> ingest_orders.download
-            validate = EmptyOperator(task_id="validate")
-            stage    = EmptyOperator(task_id="stage")
-            download >> validate >> stage
-        groups.append(tg)
+        ingest.override(group_id=f"ingest_{name}")(name)
 
-    start >> groups >> end     # start before both groups; both groups before end
+
+pipeline()
 ```
 
 Read the shape:
 
-- Each `with TaskGroup(...)` creates one collapsible node; tasks inside are
-  prefixed `ingest_orders.*`, `ingest_users.*`.
-- `groups` is a list of the two group objects; `start >> groups >> end` fans out
-  to both groups and fans them back into `end` - groups behave like tasks in
-  wiring.
+- `@task_group(group_id="ingest")` defines the group once; `.override(group_id=...)`
+  gives each call a unique id so the two instances don't collide.
+- Inside, wiring is pure TaskFlow - `stage(validate(download(name)))` draws
+  `download -> validate -> stage` via data flow (Session 01), no `>>`.
+- Task ids come out prefixed: `ingest_orders.download`, `ingest_users.stage`, ...
 - No SubDAG, no extra scheduling cost - just structure.
 
 Run it:
@@ -188,31 +234,36 @@ airflow dags test task_group_demo 2026-01-01
 
 ---
 
-## 7. Build spec - you write this (no solution)
+## 7. Build spec - you write this (no solution, TaskFlow)
 
 Create `dags/03_task_groups.py`, dag_id `03_task_groups`. Build a multi-source
-ingestion DAG that uses **parametrized groups AND a nested group**.
+ingestion DAG in **pure TaskFlow** that uses **a parametrized group AND a nested
+group**.
 
 **Structure:**
-- A `start` `EmptyOperator` and a `merge` `EmptyOperator` at the top level.
-- A group per source, for **three** sources: `orders`, `users`, `products`.
-  Each source group (`group_id` like `ingest_orders`) contains:
-  - `download` (EmptyOperator)
-  - a **nested** group `quality` containing `check_nulls` and `check_schema`
-  - `stage` (EmptyOperator)
-  - wired: `download >> quality-group >> stage`
-- Wire: `start >> [all three source groups] >> merge`.
+- A `@task_group` `ingest(name)`, instantiated for **three** sources: `orders`,
+  `users`, `products` - each with a distinct `group_id` (e.g. `ingest_orders`).
+- Inside each `ingest` group:
+  - `@task download(src)` -> returns a path string.
+  - a **nested** `@task_group quality(path)` containing two `@task`s,
+    `check_nulls(path)` and `check_schema(path)`, each returning `path`.
+  - `@task stage(path)` -> prints "staged {path}".
+  - wired by data flow: `download`'s output feeds `quality`, whose output feeds
+    `stage`.
 
 **The thinking part:**
-- Instantiate the same source-group structure three times without `group_id`
-  collisions (loop + f-string id, or `.override`).
-- Nest the `quality` group inside each source group and confirm the ids come out
-  as `ingest_orders.quality.check_nulls`, etc.
-- Wire a nested group between two tasks (`download >> quality >> stage`) - the
-  group object goes in the middle of the chain.
+- Instantiate the same group three times without `group_id` collisions using
+  `.override(group_id=f"ingest_{name}")(name)`.
+- Nest `quality` inside `ingest` and confirm the ids come out as
+  `ingest_orders.quality.check_nulls`, etc.
+- Thread the path through the nested group with TaskFlow data flow - the nested
+  group takes `download`'s output and returns something `stage` consumes. (Decide
+  what the nested group should return so `stage` gets a single path - the two
+  checks both return `path`, so pick one, or have `quality` return the path it
+  was given.)
 
 **Constraints:**
-- All tasks `EmptyOperator`.
+- Pure TaskFlow - `@task_group` + `@task`, no `EmptyOperator`, no `>>`.
 - Integrity gates pass: `tags`, real `owner`, `retries >= 1` via `default_args`.
 
 **Acceptance criteria:**
