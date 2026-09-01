@@ -147,26 +147,79 @@ no `>>` needed.
 
 ## 5. Wiring groups together
 
+### Ordering groups with `>>`
+
 You can set dependencies on **whole groups** just like tasks - `>>` works on a
-group object and wires its boundary tasks:
+group object:
 
 ```python
-start >> group_a >> group_b >> end
+group_a >> group_b        # every task in group_b waits for group_a to finish
 ```
 
-In pure TaskFlow you usually wire by **data flow** instead - pass one group's
-output into the next (`stage(validate(download(name)))`), same as tasks. Use `>>`
-on groups only when there's no data to thread.
+**Does `>>` work in TaskFlow?** Yes. `>>` is defined on `@task` results (XComArgs)
+and on group results, not just classic operators:
 
-### Instantiating the same group many times
+```python
+a() >> b()                # dependency only, no data passed - valid TaskFlow
+g1 = first_group()
+g2 = second_group()
+g1 >> g2                  # order the groups
+```
 
-Calling a `@task_group` function twice would collide on `group_id`. Give each a
-distinct id with `.override(group_id=...)`:
+Rule of thumb in TaskFlow:
+- **Data to pass?** wire by passing it - `stage(download(x))` - edge is automatic.
+- **No data, just ordering?** use `>>` - `a() >> b()`, `g1 >> g2`.
+
+(`g1 >> g2` needs the group calls to return something wireable; if a group
+returns `None`, give it a `return` or order by data flow.)
+
+### Reusing the same group for many inputs
+
+You wrote a group once. Give its three pieces different names so it's obvious
+which is which - function name `load_source`, group_id `"box"`, input `source`:
+
+```python
+@task_group(group_id="box")
+def load_source(source):
+    ...
+```
+
+| Name | What it is |
+|---|---|
+| `load_source` | the function name - a label for your code (cosmetic) |
+| `"box"` | the group_id - the name Airflow shows in the UI (must be unique) |
+| `source` | the input you pass in |
+
+You want it for orders, users, products. Calling it three times **crashes** -
+all three become a group named `"box"`, and group_ids must be unique:
+
+```python
+load_source("orders")     # group "box"
+load_source("users")      # group "box" AGAIN -> collision
+```
+
+`.override(group_id="...")` means "same code, new name". Give each a unique name:
+
+```python
+load_source.override(group_id="box_orders")("orders")
+load_source.override(group_id="box_users")("users")
+load_source.override(group_id="box_products")("products")
+```
+
+Read one line: *"run the `load_source` code, name this group `box_orders`, feed
+it `orders`."* The two parentheses are two steps - `.override(...)` sets the name,
+`(...)` then calls it.
+
+Those three lines only differ by the source name, so shorten them into a loop:
 
 ```python
 for name in ["orders", "users", "products"]:
-    ingest.override(group_id=f"ingest_{name}")(name)
+    load_source.override(group_id=f"box_{name}")(name)
 ```
+
+Each pass, `name` is one source and `f"box_{name}"` glues `box_` onto it to build
+the unique group_id (`box_orders`, `box_users`, `box_products`). One group
+definition, three renamed copies.
 
 ---
 
