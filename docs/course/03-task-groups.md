@@ -91,17 +91,7 @@ Like `@dag`/`dag_id`, they are independent:
 - **`group_id`** is the group's real identity (the prefix on child task ids).
 
 They can differ, and this course always keeps them different so it's obvious
-which is which. If you omit `group_id`, the **function name becomes it**:
-
-```python
-@task_group(group_id="ingest")
-def load():            # function name irrelevant -> prefix is "ingest"
-    ...
-
-@task_group            # no group_id
-def orders():          # function name IS the group_id -> prefix is "orders"
-    ...
-```
+which is which. If you omit `group_id`, the **function name becomes it**.
 
 ---
 
@@ -298,45 +288,73 @@ airflow dags test task_group_demo 2026-01-01
 
 ## 7. Build spec - you write this (no solution, TaskFlow)
 
-Create `dags/03_task_groups.py`, dag_id `03_task_groups`. Build a multi-source
-ingestion DAG in **pure TaskFlow** that uses **a parametrized group AND a nested
-group**. Keep every function name different from its `group_id` string.
+**File:** `dags/03_task_groups.py`  ·  **dag_id:** `03_task_groups`
 
-**Structure:**
+**Goal:** ingest three data sources. Each source is one task group. Inside a
+source group, a file is downloaded, passes two quality checks (in a nested
+group), then is staged.
 
-- A `@task_group` (function e.g. `load_source`, group_id `"src"`), instantiated
-  for **three** sources: `orders`, `users`, `products` - each with a distinct
-  `group_id` (e.g. `src_orders`).
-- Inside each group:
-  - `@task download(name)` -> returns a path string.
-  - a **nested** `@task_group` (function e.g. `run_checks`, group_id `"quality"`)
-    containing two `@task`s, `check_nulls(path)` and `check_schema(path)`, each
-    returning `path`.
-  - `@task stage(path)` -> prints "staged {path}".
-  - wired by data flow: `download`'s output feeds the checks group, whose output
-    feeds `stage`.
+### Step 1 - the DAG
 
-**The thinking part:**
+A `@dag` with `schedule=None`, `catchup=False`, `tags` (non-empty), and
+`default_args` giving a real `owner` and `retries >= 1`.
 
-- Instantiate the same group three times without `group_id` collisions using
-  `.override(group_id=f"src_{name}")(name)`.
-- Nest the checks group inside and confirm the ids come out as
-  `src_orders.quality.check_nulls`, etc.
-- Thread the path through the nested group with TaskFlow data flow - the nested
-  group takes `download`'s output and returns something `stage` consumes. (Decide
-  what the nested group should return so `stage` gets a single path.)
+### Step 2 - names to use
 
-**Constraints:**
+Keep every **function name** different from its **group_id** string:
 
-- Pure TaskFlow - `@task_group` + `@task`, no `EmptyOperator`, no `>>`.
-- Function names must differ from their `group_id` strings.
+| Piece | function name | group_id |
+|---|---|---|
+| outer group (one per source) | `load_source` | `"src"` |
+| nested group (the checks) | `run_checks` | `"quality"` |
+
+### Step 3 - the tasks, and what each returns
+
+Inside `load_source(name)`, define these `@task`s in order:
+
+1. `download(name)` -> returns the path string `f"/raw/{name}"`.
+2. `run_checks(path)` -> the **nested `@task_group`**. Inside it:
+   - `check_nulls(path)` -> returns `path`.
+   - `check_schema(checked)` -> takes `check_nulls`'s output, returns it.
+   - the nested group ends with `return check_schema(check_nulls(path))` so it
+     hands back a single path *after both checks ran*.
+3. `stage(path)` -> prints `f"staged {path}"`, returns `None`.
+
+### Step 4 - wire it (one line, pure data flow)
+
+```python
+stage(run_checks(download(name)))
+```
+
+### Step 5 - create one group per source
+
+```python
+for name in ["orders", "users", "products"]:
+    load_source.override(group_id=f"src_{name}")(name)
+```
+
+### The graph you should get (per source, e.g. `src_orders`)
+
+```
+src_orders.download
+  -> src_orders.quality.check_nulls
+  -> src_orders.quality.check_schema
+  -> src_orders.stage
+```
+
+Three of these - one per source - side by side.
+
+### Constraints
+
+- Pure TaskFlow - `@task_group` + `@task`. No `EmptyOperator`, no `>>`.
+- Every function name differs from its `group_id` string.
 - Integrity gates pass: `tags`, real `owner`, `retries >= 1` via `default_args`.
 
-**Acceptance criteria:**
+### Acceptance criteria
 
-- `python dags/03_task_groups.py` parses cleanly.
-- UI Graph shows three collapsible `src_*` groups, each with a nested `quality`
-  box between `download` and `stage`.
+- `python dags/03_task_groups.py` parses (prints nothing).
+- UI Graph: three collapsible `src_*` groups, each with a nested `quality` box
+  between `download` and `stage`.
 - `airflow tasks test 03_task_groups src_orders.quality.check_nulls 2026-01-01`
   runs (proves the nested prefixed id is correct).
 - `airflow dags test 03_task_groups 2026-01-01` runs everything green.
