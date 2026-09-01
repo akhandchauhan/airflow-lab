@@ -41,8 +41,8 @@ each logical stage into one box.
 and called inside becomes a member of the group.
 
 ```python
-@task_group(group_id="ingest")
-def ingest():
+@task_group(group_id="ingest")     # group_id string
+def load():                        # function name - kept different from the group_id
     @task
     def download() -> str:
         return "/raw/file"
@@ -90,11 +90,12 @@ Like `@dag`/`dag_id`, they are independent:
 - The **function name** is a Python label, cosmetic.
 - **`group_id`** is the group's real identity (the prefix on child task ids).
 
-They can differ. And if you omit `group_id`, the **function name becomes it**:
+They can differ, and this course always keeps them different so it's obvious
+which is which. If you omit `group_id`, the **function name becomes it**:
 
 ```python
 @task_group(group_id="ingest")
-def whatever():        # function name irrelevant -> prefix is "ingest"
+def load():            # function name irrelevant -> prefix is "ingest"
     ...
 
 @task_group            # no group_id
@@ -102,24 +103,23 @@ def orders():          # function name IS the group_id -> prefix is "orders"
     ...
 ```
 
-Naming them the same (`orders` / `"orders"`) is just readability convention, not
-a requirement.
-
 ---
 
 ## 4. Nesting groups (TaskFlow)
 
-Groups nest. A `@task_group` defined inside another `@task_group` prefixes twice:
+Groups nest. A `@task_group` defined inside another `@task_group` prefixes twice.
+Function names (`source`, `checks`) are kept different from the group_id strings
+(`"orders"`, `"quality"`) on purpose:
 
 ```python
 @task_group(group_id="orders")
-def orders():
+def source():                                  # function name != group_id "orders"
     @task
     def download() -> str:                     # -> orders.download
         return "/raw/orders"
 
     @task_group(group_id="quality")
-    def quality(path: str):
+    def checks(path: str):                     # function name != group_id "quality"
         @task
         def check_nulls(p: str) -> str:        # -> orders.quality.check_nulls
             return p
@@ -131,15 +131,16 @@ def orders():
         check_nulls(path)
         check_schema(path)
 
-    quality(download())                        # download's output flows into the nested group
+    checks(download())                         # download's output flows into the nested group
 
-orders()
+source()
 ```
 
-The id builds up one prefix per nesting level: `orders.quality.check_nulls`. The
-UI shows `orders` collapsing to reveal `download` and a nested `quality` box.
+The id builds up one prefix per nesting level: `orders.quality.check_nulls` -
+note the ids come from the **group_id** strings, not the function names. The UI
+shows `orders` collapsing to reveal `download` and a nested `quality` box.
 
-Note the wiring is pure TaskFlow: `quality(download())` passes `download`'s
+Note the wiring is pure TaskFlow: `checks(download())` passes `download`'s
 XComArg into the nested group, which draws the edge automatically (Session 01) -
 no `>>` needed.
 
@@ -167,6 +168,7 @@ g1 >> g2                  # order the groups
 ```
 
 Rule of thumb in TaskFlow:
+
 - **Data to pass?** wire by passing it - `stage(download(x))` - edge is automatic.
 - **No data, just ordering?** use `>>` - `a() >> b()`, `g1 >> g2`.
 
@@ -207,8 +209,9 @@ load_source.override(group_id="box_products")("products")
 ```
 
 Read one line: *"run the `load_source` code, name this group `box_orders`, feed
-it `orders`."* The two parentheses are two steps - `.override(...)` sets the name,
-`(...)` then calls it.
+it `orders`."* The `load_source` before the dot is the **function** (the Python
+variable); `.override` is called on it. The two parentheses are two steps -
+`.override(...)` sets the name, `(...)` then calls it.
 
 Those three lines only differ by the source name, so shorten them into a loop:
 
@@ -226,7 +229,9 @@ definition, three renamed copies.
 ## 6. A complete runnable DAG (your reference, TaskFlow)
 
 A whole file, end to end, before the spec. One parametrized `@task_group`,
-instantiated twice with `.override(group_id=...)`.
+instantiated twice with `.override(group_id=...)`. Names are kept **deliberately
+different** so it's obvious which is which: function name `load_source`, group_id
+`"src"`.
 
 ```python
 from __future__ import annotations
@@ -245,25 +250,26 @@ from airflow.sdk import dag, task, task_group
 )
 def pipeline():
 
-    @task_group(group_id="ingest")
-    def ingest(name: str) -> None:
+    # function name: load_source   |   group_id: "src"
+    @task_group(group_id="src")
+    def load_source(source: str) -> None:
         @task
-        def download(src: str) -> str:         # -> ingest_orders.download
-            return f"/raw/{src}"
+        def download(name: str) -> str:        # -> src_orders.download
+            return f"/raw/{name}"
 
         @task
-        def validate(path: str) -> str:        # -> ingest_orders.validate
+        def validate(path: str) -> str:        # -> src_orders.validate
             return path
 
         @task
-        def stage(path: str) -> None:          # -> ingest_orders.stage
+        def stage(path: str) -> None:          # -> src_orders.stage
             print(f"staging {path}")
 
-        stage(validate(download(name)))        # TaskFlow wiring inside the group
+        stage(validate(download(source)))      # TaskFlow wiring inside the group
 
-    # instantiate the same group per source, distinct group_id each time
+    # call .override on the FUNCTION (load_source), giving each a distinct group_id
     for name in ["orders", "users"]:
-        ingest.override(group_id=f"ingest_{name}")(name)
+        load_source.override(group_id=f"src_{name}")(name)
 
 
 pipeline()
@@ -271,11 +277,14 @@ pipeline()
 
 Read the shape:
 
-- `@task_group(group_id="ingest")` defines the group once; `.override(group_id=...)`
-  gives each call a unique id so the two instances don't collide.
-- Inside, wiring is pure TaskFlow - `stage(validate(download(name)))` draws
+- `load_source` is the **function** (Python variable); `"src"` is the default
+  `group_id`. They are different names on purpose - `.override` is called on the
+  function, and it sets a new `group_id`.
+- `.override(group_id=f"src_{name}")` gives each call a unique id so the two
+  instances don't collide.
+- Inside, wiring is pure TaskFlow - `stage(validate(download(source)))` draws
   `download -> validate -> stage` via data flow (Session 01), no `>>`.
-- Task ids come out prefixed: `ingest_orders.download`, `ingest_users.stage`, ...
+- Task ids come out prefixed: `src_orders.download`, `src_users.stage`, ...
 - No SubDAG, no extra scheduling cost - just structure.
 
 Run it:
@@ -291,39 +300,44 @@ airflow dags test task_group_demo 2026-01-01
 
 Create `dags/03_task_groups.py`, dag_id `03_task_groups`. Build a multi-source
 ingestion DAG in **pure TaskFlow** that uses **a parametrized group AND a nested
-group**.
+group**. Keep every function name different from its `group_id` string.
 
 **Structure:**
-- A `@task_group` `ingest(name)`, instantiated for **three** sources: `orders`,
-  `users`, `products` - each with a distinct `group_id` (e.g. `ingest_orders`).
-- Inside each `ingest` group:
-  - `@task download(src)` -> returns a path string.
-  - a **nested** `@task_group quality(path)` containing two `@task`s,
-    `check_nulls(path)` and `check_schema(path)`, each returning `path`.
+
+- A `@task_group` (function e.g. `load_source`, group_id `"src"`), instantiated
+  for **three** sources: `orders`, `users`, `products` - each with a distinct
+  `group_id` (e.g. `src_orders`).
+- Inside each group:
+  - `@task download(name)` -> returns a path string.
+  - a **nested** `@task_group` (function e.g. `run_checks`, group_id `"quality"`)
+    containing two `@task`s, `check_nulls(path)` and `check_schema(path)`, each
+    returning `path`.
   - `@task stage(path)` -> prints "staged {path}".
-  - wired by data flow: `download`'s output feeds `quality`, whose output feeds
-    `stage`.
+  - wired by data flow: `download`'s output feeds the checks group, whose output
+    feeds `stage`.
 
 **The thinking part:**
+
 - Instantiate the same group three times without `group_id` collisions using
-  `.override(group_id=f"ingest_{name}")(name)`.
-- Nest `quality` inside `ingest` and confirm the ids come out as
-  `ingest_orders.quality.check_nulls`, etc.
+  `.override(group_id=f"src_{name}")(name)`.
+- Nest the checks group inside and confirm the ids come out as
+  `src_orders.quality.check_nulls`, etc.
 - Thread the path through the nested group with TaskFlow data flow - the nested
   group takes `download`'s output and returns something `stage` consumes. (Decide
-  what the nested group should return so `stage` gets a single path - the two
-  checks both return `path`, so pick one, or have `quality` return the path it
-  was given.)
+  what the nested group should return so `stage` gets a single path.)
 
 **Constraints:**
+
 - Pure TaskFlow - `@task_group` + `@task`, no `EmptyOperator`, no `>>`.
+- Function names must differ from their `group_id` strings.
 - Integrity gates pass: `tags`, real `owner`, `retries >= 1` via `default_args`.
 
 **Acceptance criteria:**
+
 - `python dags/03_task_groups.py` parses cleanly.
-- UI Graph shows three collapsible `ingest_*` groups, each with a nested
-  `quality` box between `download` and `stage`.
-- `airflow tasks test 03_task_groups ingest_orders.quality.check_nulls 2026-01-01`
+- UI Graph shows three collapsible `src_*` groups, each with a nested `quality`
+  box between `download` and `stage`.
+- `airflow tasks test 03_task_groups src_orders.quality.check_nulls 2026-01-01`
   runs (proves the nested prefixed id is correct).
 - `airflow dags test 03_task_groups 2026-01-01` runs everything green.
 - `python -m pytest tests/ -v` stays green.
