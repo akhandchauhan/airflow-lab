@@ -14,7 +14,8 @@ Practical ritual: **real dataset -> build spec -> run against BigQuery -> verify
 rows + bytes billed -> push**.
 
 Artifacts: concept note `docs/course/WW-topic.md` (+ local `Documents/AIRFLOW/course/`);
-your DAG in `dags/`, must pass integrity tests + CI. Tick each item when its
+your DAG in `dags/task-N/` (session N in its own subfolder — Airflow parses
+`dags/` recursively), must pass integrity tests + CI. Tick each item when its
 CI-green commit lands.
 
 ---
