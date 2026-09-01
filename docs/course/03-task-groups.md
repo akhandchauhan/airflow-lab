@@ -214,16 +214,6 @@ Each pass, `name` is one source and `f"box_{name}"` glues `box_` onto it to buil
 the unique group_id (`box_orders`, `box_users`, `box_products`). One group
 definition, three renamed copies.
 
-### Why the NESTED group needs no `.override`
-
-`.override` is only needed when the **same group is created more than once at the
-same level**. `load_source` is called 3 times at the top level -> all would be
-`"src"` -> collision -> override each. A nested group is created once inside each
-parent, and nesting **auto-prefixes with the parent's group_id**, so the three
-nested copies come out as `src_orders.quality`, `src_users.quality`,
-`src_products.quality` - already unique. You override the parent; nesting handles
-the rest.
-
 ---
 
 ## 6. A complete runnable DAG (your reference, TaskFlow)
@@ -287,7 +277,7 @@ Read the shape:
 - Task ids come out prefixed: `src_orders.download`, `src_users.stage`, ...
 - No SubDAG, no extra scheduling cost - just structure.
 
-Run it:
+Run it (the demo also lives in your session subfolder):
 
 ```bash
 python dags/task-3/task_group_demo.py
@@ -296,81 +286,83 @@ airflow dags test task_group_demo 2026-01-01
 
 ---
 
-## 7. Build spec - you write this (no solution, TaskFlow)
+## 7. Build spec - your challenge (no solution)
 
 **File:** `dags/task-3/03_task_groups.py`  ·  **dag_id:** `03_task_groups`
 
-**Goal:** ingest three data sources. Each source is one task group. Inside a
-source group, a file is downloaded, passes two quality checks (in a nested
-group), then is staged.
+Build a **multi-source ingestion pipeline** in pure TaskFlow.
 
-### Step 1 - the DAG
+**The problem:**
 
-A `@dag` with `schedule=None`, `catchup=False`, `tags` (non-empty), and
-`default_args` giving a real `owner` and `retries >= 1`.
+- The pipeline ingests **three** data sources: `orders`, `users`, `products`.
+- Each source is handled by its **own task group** - but you must **reuse one
+  group definition** for all three, not copy-paste it three times.
+- Within each source's group, the data must:
+  1. be **downloaded** (a task that produces some path/handle),
+  2. pass **two quality checks** that live in a **nested group** inside the
+     source group,
+  3. be **staged** by a final task, which only runs after both checks pass.
+- The whole thing is wired by **data flow** (values passed between tasks), the
+  TaskFlow way.
 
-### Step 2 - names to use
-
-Keep every **function name** different from its **group_id** string:
-
-| Piece | function name | group_id |
-|---|---|---|
-| outer group (one per source) | `load_source` | `"src"` |
-| nested group (the checks) | `run_checks` | `"quality"` |
-
-### Step 3 - the tasks, and what each returns
-
-Inside `load_source(name)`, define these `@task`s in order:
-
-1. `download(name)` -> returns the path string `f"/raw/{name}"`.
-2. `run_checks(path)` -> the **nested `@task_group`**. Inside it:
-   - `check_nulls(path)` -> returns `path`.
-   - `check_schema(checked)` -> takes `check_nulls`'s output, returns it.
-   - the nested group ends with `return check_schema(check_nulls(path))` so it
-     hands back a single path *after both checks ran*.
-3. `stage(path)` -> prints `f"staged {path}"`, returns `None`.
-
-### Step 4 - wire it (one line, pure data flow)
-
-`stage`, `run_checks`, `download` are the three tasks from Step 3:
-
-```python
-stage(run_checks(download(name)))
-```
-
-### Step 5 - create one group per source
-
-```python
-for name in ["orders", "users", "products"]:
-    load_source.override(group_id=f"src_{name}")(name)
-```
-
-### The graph you should get (per source, e.g. `src_orders`)
-
-```
-src_orders.download
-  -> src_orders.quality.check_nulls
-  -> src_orders.quality.check_schema
-  -> src_orders.stage
-```
-
-Three of these - one per source - side by side.
-
-### Constraints
+**Constraints:**
 
 - Pure TaskFlow - `@task_group` + `@task`. No `EmptyOperator`, no `>>`.
-- Every function name differs from its `group_id` string.
-- Integrity gates pass: `tags`, real `owner`, `retries >= 1` via `default_args`.
+- Reuse the source-group definition; the three instances must not collide on
+  `group_id`.
+- Keep every **function name different from its `group_id`** string.
+- Passes the integrity gates: `tags`, real `owner`, `retries >= 1` via
+  `default_args`.
 
-### Acceptance criteria
+**Acceptance criteria (how you'll know it's right):**
 
 - `python dags/task-3/03_task_groups.py` parses (prints nothing).
-- UI Graph: three collapsible `src_*` groups, each with a nested `quality` box
-  between `download` and `stage`.
-- `airflow tasks test 03_task_groups src_orders.quality.check_nulls 2026-01-01`
-  runs (proves the nested prefixed id is correct).
+- The UI Graph shows **three** collapsible source groups, each containing a
+  **nested** checks group sitting between download and stage.
+- The nested check tasks have **doubly-prefixed** ids (e.g. something like
+  `<source>.<checks>.<check_name>`) - pick one and run it with
+  `airflow tasks test 03_task_groups <that.full.id> 2026-01-01`.
 - `airflow dags test 03_task_groups 2026-01-01` runs everything green.
 - `python -m pytest tests/ -v` stays green.
+
+**One nudge (only if stuck):** you learned the tool for "reuse a group without an
+id collision" in section 5. Nesting takes care of the inner group's uniqueness on
+its own - see the note right below.
+
+---
+
+## 7b. Why the nested group needs no `.override`
+
+`.override(group_id=...)` exists for **one reason**: to avoid a duplicate
+`group_id` when you create the **same group more than once at the same level**.
+
+- The source group is created **3 times at the top level** (once per source).
+  Left alone, all three would share one `group_id` -> collision -> so each needs
+  a unique name via `.override`.
+- The checks group is created **once inside each source group**. Within a single
+  source group there is only one checks group -> no collision -> no `.override`.
+
+**"But the source group runs 3 times - isn't the checks group also created 3
+times?"** Yes - three checks groups get created. They still don't collide,
+because **nesting auto-prefixes with the parent's group_id**:
+
+```
+src_orders.quality      <- checks group inside src_orders
+src_users.quality       <- checks group inside src_users
+src_products.quality    <- checks group inside src_products
+```
+
+The parent prefix (`src_orders`, `src_users`, `src_products`) makes each
+`quality` unique for free. You override only the **parent**; every nested group
+inherits that uniqueness.
+
+| Situation | Need `.override`? |
+|---|---|
+| Same group created N times **at the same level** | ✅ Yes - rename each |
+| Group nested inside an already-unique parent | ❌ No - parent prefix makes it unique |
+
+So you override at the level where the collision would happen (the top loop), and
+nesting handles the rest.
 
 ---
 
