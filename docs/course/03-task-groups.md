@@ -214,6 +214,16 @@ Each pass, `name` is one source and `f"box_{name}"` glues `box_` onto it to buil
 the unique group_id (`box_orders`, `box_users`, `box_products`). One group
 definition, three renamed copies.
 
+### Why the NESTED group needs no `.override`
+
+`.override` is only needed when the **same group is created more than once at the
+same level**. `load_source` is called 3 times at the top level -> all would be
+`"src"` -> collision -> override each. A nested group is created once inside each
+parent, and nesting **auto-prefixes with the parent's group_id**, so the three
+nested copies come out as `src_orders.quality`, `src_users.quality`,
+`src_products.quality` - already unique. You override the parent; nesting handles
+the rest.
+
 ---
 
 ## 6. A complete runnable DAG (your reference, TaskFlow)
@@ -280,7 +290,7 @@ Read the shape:
 Run it:
 
 ```bash
-python dags/task_group_demo.py
+python dags/task-3/task_group_demo.py
 airflow dags test task_group_demo 2026-01-01
 ```
 
@@ -288,7 +298,7 @@ airflow dags test task_group_demo 2026-01-01
 
 ## 7. Build spec - you write this (no solution, TaskFlow)
 
-**File:** `dags/03_task_groups.py`  ·  **dag_id:** `03_task_groups`
+**File:** `dags/task-3/03_task_groups.py`  ·  **dag_id:** `03_task_groups`
 
 **Goal:** ingest three data sources. Each source is one task group. Inside a
 source group, a file is downloaded, passes two quality checks (in a nested
@@ -322,6 +332,8 @@ Inside `load_source(name)`, define these `@task`s in order:
 
 ### Step 4 - wire it (one line, pure data flow)
 
+`stage`, `run_checks`, `download` are the three tasks from Step 3:
+
 ```python
 stage(run_checks(download(name)))
 ```
@@ -352,7 +364,7 @@ Three of these - one per source - side by side.
 
 ### Acceptance criteria
 
-- `python dags/03_task_groups.py` parses (prints nothing).
+- `python dags/task-3/03_task_groups.py` parses (prints nothing).
 - UI Graph: three collapsible `src_*` groups, each with a nested `quality` box
   between `download` and `stage`.
 - `airflow tasks test 03_task_groups src_orders.quality.check_nulls 2026-01-01`
@@ -378,13 +390,18 @@ task's id, so renaming a group renames all its tasks' history.
 ## 9. Verify + commit
 
 ```bash
-python dags/03_task_groups.py
+python dags/task-3/03_task_groups.py
 airflow dags test 03_task_groups 2026-01-01
 python -m pytest tests/ -v
-git add dags/03_task_groups.py && git commit -m "course: 03 task groups" && git push
+git add -A && git commit -m "course: 03 task groups" && git push
 ```
 
 Done when CI is green. Tick session 03 in `docs/course/README.md`.
+
+> Paths use your subfolder layout: session N lives in `dags/task-N/`. The
+> `airflow dags test <dag_id>` and pytest commands are path-independent (they use
+> the dag_id / scan `dags/` recursively); only the `python dags/...py`
+> parse-check needs the real file path.
 
 **Pre-push habit:** run
 `ruff check dags/ include/ tests/ --select E,F,AIR3 && python -m pytest tests/ -v`
