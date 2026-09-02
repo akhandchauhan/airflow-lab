@@ -42,30 +42,36 @@ must exist. Setting `GOOGLE_APPLICATION_CREDENTIALS` alone is **not** enough: in
 Airflow 3 the operator calls `get_connection("google_cloud_default")` and raises
 `AirflowNotFoundException` if it isn't defined, *before* ADC is ever read.
 
-Put the key **outside the repo** (never commit it), then define the connection as
-an **environment-variable connection** (no DB row, survives `standalone` restarts):
+Two ways to define it. For a single-node standalone Codespace the **metadata-DB**
+connection is the most reliable (read by the API server at task time, no restart,
+no shell-env surprises):
 
 ```bash
+# key lives OUTSIDE the repo
 mkdir -p ~/.gcp
-mv /path/to/downloaded-key.json ~/.gcp/key.json          # outside the repo
+mv /path/to/downloaded-key.json ~/.gcp/key.json
 
-# Define google_cloud_default. key_path -> your key file; project -> billing project.
+airflow connections add google_cloud_default \
+  --conn-type google_cloud_platform \
+  --conn-extra '{"key_path": "/home/vscode/.gcp/key.json", "project": "your-project-id"}'
+
+airflow connections get google_cloud_default   # verify
+```
+
+Alternative — an **environment-variable connection** (no DB row). Works only if
+the var is present in the **API server's** process (i.e. exported *before* you
+launch `standalone`, in that same shell), which is easy to get wrong:
+
+```bash
 export AIRFLOW_CONN_GOOGLE_CLOUD_DEFAULT='{"conn_type": "google_cloud_platform", "extra": {"key_path": "/home/vscode/.gcp/key.json", "project": "your-project-id"}}'
 ```
 
-`AIRFLOW_CONN_<CONN_ID>` defines a connection straight from the env var — Airflow
-reads it before touching the metadata DB. `key_path` points the hook at your key
-(no separate ADC var needed); `project` is your billing project. Accepted extra
-keys: `key_path`, `key_dict`, `project`, `scope`, `num_retries`. Restart Airflow
-(`Ctrl+C`, then `airflow standalone`), then verify:
+Accepted extra keys: `key_path`, `key_dict`, `project`, `scope`, `num_retries`.
+Use an **absolute** `key_path` — `~` is not expanded inside the JSON string.
 
-```bash
-airflow connections get google_cloud_default
-```
-
-> Persist across Codespace restarts by putting the two lines in `~/.bashrc`, or
-> store the key JSON as a **Codespaces secret** and write it to `~/.gcp/key.json`
-> on start. Use an **absolute** `key_path` — `~` is not expanded inside the JSON.
+> In Airflow 3 tasks resolve connections through the **API server**, a separate
+> process from your shell — that is why a plain `export` in one terminal often
+> doesn't reach the task runner, and the DB connection is the safer default.
 
 ### 1d. Security — never commit the key
 
@@ -101,8 +107,8 @@ All from `airflow.providers.google.cloud.operators.bigquery`:
 
 | Operator | Use |
 |---|---|
-| `BigQueryInsertJobOperator` | run any query/DDL job; the general workhorse |
-| `BigQueryValueCheckOperator` | run a single-row query and assert its value (data quality) |
+| `BigQueryInsertJobOperator` | run any query/DDL job; the general workhorse. XCom = the **job id**, not the query rows |
+| `BigQueryValueCheckOperator` | run a single-row query and **assert** its value (data quality); passes/fails, doesn't hand you the value |
 | `BigQueryGetDataOperator` | read rows from a **table** into XCom |
 
 These are **classic operators** (you instantiate them, wire with `>>`), not
@@ -112,6 +118,13 @@ for `InsertJob` a `configuration={"query": {...}}` block.
 ```python
 from airflow.providers.google.cloud.operators.bigquery import BigQueryInsertJobOperator
 ```
+
+> **Orchestrate, don't compute.** `InsertJob` is for side-effecting SQL
+> (`CREATE TABLE AS`, `INSERT`, `MERGE`, transforms) — the result stays *in
+> BigQuery*, and downstream tasks read it there. XCom is a tiny control-signal
+> store (metadata DB), never a data pipe; only pull a **small scalar** back when
+> orchestration must decide on it (a branch, a quality gate). To surface a value
+> in XCom, use a `@task` with `BigQueryHook.get_first(sql)` and `return` it.
 
 ---
 
@@ -184,7 +197,9 @@ airflow dags test p1_bq_hello_demo 2026-01-01
 
 Then open the **BigQuery console → Job history** — you'll see the job, and
 **Bytes billed = 0 B** for the `COUNT(*)`. That confirms the wiring and the cost
-cap both work.
+cap both work. (The `count_trips` XCom holds the **job id**, not the number — to
+read the count, open the job in Job history, run the query in the BQ SQL editor,
+or use the `BigQueryHook.get_first` `@task` pattern above.)
 
 ---
 
@@ -225,6 +240,31 @@ BigQuery provider operators, organized with TaskGroups, and cost-capped.
 **Nudge (only if stuck):** `BigQueryValueCheckOperator` is built exactly for the
 "fail if a query's value isn't what I expect" case; `BigQueryInsertJobOperator`
 runs the counting/top-N queries. TaskGroups from Session 03 organize them.
+
+---
+
+## Production tip — cost governance is the SLA of warehouse orchestration
+
+In a real org, an uncapped query is a bug, not a style nit: one `SELECT *` on a
+partitioned table can scan terabytes and bill real money. Four practices that
+separate a toy DAG from a production one:
+
+- **Cap every query** with `maximumBytesBilled` (you already do). Make it a
+  non-negotiable rule — ideally enforced in review/CI, not left to memory.
+- **Label jobs for cost attribution.** The operator already auto-stamps
+  `airflow-dag` / `airflow-task` labels (you saw them in the run log). Add your
+  own so BigQuery billing is sliceable by team/env:
+  ```python
+  configuration={"query": {..., "labels": {"team": "data-eng", "env": "dev"}}}
+  ```
+  Then attribute spend with `INFORMATION_SCHEMA.JOBS` (filter on the labels) —
+  answers "what did this pipeline cost last month?".
+- **Partition pruning is the real lever.** "Bytes billed" is driven by how much
+  data a query touches. Filter on the partition/clustering column so BigQuery
+  scans one partition, not the whole table — that, not the cap, is what keeps
+  cost low day to day.
+- **Least-privilege, per-environment service account.** Job User + Data Viewer
+  only, a separate SA per env; never an Owner/Editor key sitting in a DAG.
 
 ---
 
