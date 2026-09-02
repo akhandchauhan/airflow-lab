@@ -2,6 +2,8 @@
 # Pin everything - unpinned installs are how Airflow environments rot.
 #
 # Examples:
-# apache-airflow-providers-google==12.0.0
 # pandas==2.2.3
 # requests==2.32.3
+
+# BigQuery + GCP operators/hooks (P1 onward)
+apache-airflow-providers-google==21.2.0
