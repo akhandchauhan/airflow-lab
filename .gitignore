@@ -7,6 +7,13 @@ airflow.cfg
 webserver_config.py
 logs/
 
+# GCP / cloud service-account keys - NEVER commit these
+.gcp/
+*-key.json
+*service_account*.json
+*service-account*.json
+dogwood-abbey-490606-e8-*.json
+
 # Generated credentials - never commit these
 *.json.generated
 
