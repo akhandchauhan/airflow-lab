@@ -39,9 +39,9 @@ Full walk-through lands in **P1**.
 - [x] **02 - Classic operators** - `>>`, `chain`, `chain_linear`, `cross_downstream`
 - [x] **03 - TaskGroups** - `@task_group`, nesting, `group_id`
 - [x] **🔷 P1 - BigQuery hello** - TaskFlow + TaskGroups on `bigquery-public-data.austin_bikeshare.bikeshare_trips` (row count + top-N stations, grouped)
-- [ ] **04 - Dynamic task mapping** - `.expand`, `.partial`, `.expand_kwargs`, `.map`, `.zip`
+- [ ] **04 - Branching + trigger rules** - `@task.branch`, `@task.short_circuit`, `TriggerRule`
 - [ ] **05 - Params + Jinja + context** - `Param`, `template_fields`, `get_current_context`
-- [ ] **06 - Branching + trigger rules** - `@task.branch`, `@task.short_circuit`, `TriggerRule`
+- [ ] **06 - Dynamic task mapping** (deferred from 04) - `.expand`, `.partial`, `.expand_kwargs`, `.map`, `.zip`
 - [ ] **🔷 P2 - Parametrized dynamic load** - dynamic-map over date shards of `google_analytics_sample.ga_sessions_*`, param date range, branch on empty shard
 
 ## Phase B - Scheduling & data-awareness
