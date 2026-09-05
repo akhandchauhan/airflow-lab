@@ -69,6 +69,72 @@ The number in brackets is the **`map_index`**, starting at 0.
 
 ---
 
+## 0b. A real BigQuery scenario (the pizza shop, for real)
+
+Here is an actual job you would run at work.
+
+**The situation:** your BigQuery dataset has several tables — `orders`, `users`,
+`products`, and more get added over time. Every morning you want a quick health
+check: the row count of **each** table, plus a grand total. The catch: **you don't
+know how many tables the dataset has**, and someone may add one next week. So you
+cannot write a fixed number of tasks.
+
+This is exactly dynamic task mapping:
+
+1. **Task 1 — `list_tables`:** ask BigQuery which tables exist right now.
+2. **Task 2 — `row_count` (mapped):** one copy per table; each returns that table's
+   count.
+3. **Task 3 — `total`:** add up all the counts and log the grand total.
+
+3 tables today → Airflow makes 3 copies. Someone adds a 4th → tomorrow's run makes
+4, with **no code change**.
+
+```python
+from airflow.providers.google.cloud.hooks.bigquery import BigQueryHook
+
+DATASET = "dogwood-abbey-490606-e8.my_dataset"
+
+
+@task
+def list_tables() -> list[str]:
+    hook = BigQueryHook(gcp_conn_id="google_cloud_default", location="US", use_legacy_sql=False)
+    rows = hook.get_records(
+        f"SELECT table_name FROM `{DATASET}.INFORMATION_SCHEMA.TABLES`"
+    )                                   # metadata query = free
+    return [r[0] for r in rows]         # e.g. ["orders", "users", "products"]
+
+
+@task(task_id="row_count")
+def count_rows(table: str, dataset: str) -> int:
+    hook = BigQueryHook(gcp_conn_id="google_cloud_default", location="US", use_legacy_sql=False)
+    row = hook.get_first(f"SELECT COUNT(*) FROM `{dataset}.{table}`")   # COUNT = 0 bytes
+    return int(row[0])
+
+
+@task
+def total(counts: list[int]) -> None:
+    print(f"checked {len(counts)} tables, {sum(counts):,} rows total")
+
+
+tables = list_tables()
+counts = count_rows.partial(dataset=DATASET).expand(table=tables)
+total(counts)
+```
+
+Line it up with the pizza shop:
+
+| Pizza shop | This DAG |
+|---|---|
+| Today's list of orders (count unknown until the day) | `list_tables()` — the list of tables, found at run time |
+| "Make one pizza per order" | `count_rows` mapped — one count per table |
+| Shop address (same for all pizzas) | `dataset` in `.partial()` — same for all copies |
+| Counting all pizzas at closing | `total()` — sums all the counts |
+
+Cost: both `INFORMATION_SCHEMA` and `COUNT(*)` scan ~0 bytes — free. This is the
+same `BigQueryHook.get_first` pattern you used in P1, just run once per table.
+
+---
+
 ## 1. `.expand()` — run the loop (one task per item)
 
 `.expand()` is the loop. You call it on a task and give it the argument that
