@@ -26,7 +26,7 @@ You have GCP creds - wire Airflow to BigQuery:
 
 1. **Provider:** add `apache-airflow-providers-google` to `requirements.txt`, `pip install` it.
 2. **Service account:** GCP console -> IAM -> service account with **BigQuery Job User** + **BigQuery Data Viewer**. Download the JSON key.
-3. **Connection:** Airflow connection `google_cloud_default` (type *Google Cloud*) with the key JSON + project id - or env var `AIRFLOW_CONN_GOOGLE_CLOUD_DEFAULT`.
+3. **Connection:** Airflow connection `google_cloud_default` (type _Google Cloud_) with the key JSON + project id - or env var `AIRFLOW_CONN_GOOGLE_CLOUD_DEFAULT`.
 4. **Cost safety:** public-dataset queries bill **your** project for bytes scanned (free tier 1 TiB/mo). Always: no `SELECT *` on big tables; add `LIMIT`/aggregate; prefer small tables (`austin_bikeshare`, `usa_names`); set `maximum_bytes_billed` (~1 GB) on the operator. Never create a Cloud Composer environment.
 
 Full walk-through lands in **P1**.
@@ -34,16 +34,18 @@ Full walk-through lands in **P1**.
 ---
 
 ## Phase A - Authoring surface
+
 - [x] **01 - TaskFlow** - `@dag`/`@task`, return->XCom, `multiple_outputs`
 - [x] **02 - Classic operators** - `>>`, `chain`, `chain_linear`, `cross_downstream`
-- [ ] **03 - TaskGroups** - `@task_group`, nesting, `group_id`
-- [ ] **🔷 P1 - BigQuery hello** - TaskFlow + TaskGroups on `bigquery-public-data.austin_bikeshare.bikeshare_trips` (row count + top-N stations, grouped)
+- [x] **03 - TaskGroups** - `@task_group`, nesting, `group_id`
+- [x] **🔷 P1 - BigQuery hello** - TaskFlow + TaskGroups on `bigquery-public-data.austin_bikeshare.bikeshare_trips` (row count + top-N stations, grouped)
 - [ ] **04 - Dynamic task mapping** - `.expand`, `.partial`, `.expand_kwargs`, `.map`, `.zip`
 - [ ] **05 - Params + Jinja + context** - `Param`, `template_fields`, `get_current_context`
 - [ ] **06 - Branching + trigger rules** - `@task.branch`, `@task.short_circuit`, `TriggerRule`
 - [ ] **🔷 P2 - Parametrized dynamic load** - dynamic-map over date shards of `google_analytics_sample.ga_sessions_*`, param date range, branch on empty shard
 
 ## Phase B - Scheduling & data-awareness
+
 - [ ] **07 - Schedules & intervals** - cron, data intervals, `logical_date`, `catchup`
 - [ ] **08 - Timetables** - `CronTriggerTimetable` vs `CronDataIntervalTimetable`, custom
 - [ ] **09 - Backfill** - `airflow backfill create`, `--reprocess-behavior`, `max_active_runs`
@@ -54,6 +56,7 @@ Full walk-through lands in **P1**.
 - [ ] **🔷 P4 - Asset-driven BQ pipeline** - producer DAG materializes a BQ summary table (asset); consumer DAG asset-triggered
 
 ## Phase C - Data passing, connections, sensors
+
 - [ ] **13 - XCom deep** - keys, `multiple_outputs`, scope
 - [ ] **14 - XCom backend + ObjectStorage** - `ObjectStoragePath`, large payloads to GCS
 - [ ] **15 - Connections + Hooks** - `BaseHook.get_connection`, `BigQueryHook`, `conn_id`
@@ -64,6 +67,7 @@ Full walk-through lands in **P1**.
 - [ ] **🔷 P6 - Secrets + deferrable sensor** - creds via secrets backend; deferrable sensor waits for a BQ partition before loading
 
 ## Phase D - Isolation, containers, cross-DAG
+
 - [ ] **19 - Dependency isolation** - `PythonVirtualenvOperator`, `ExternalPythonOperator`
 - [ ] **20 - Container tasks** - `DockerOperator`, `KubernetesPodOperator`
 - [ ] **21 - Cross-DAG** - `TriggerDagRunOperator`, Assets vs `ExternalTaskSensor`
@@ -71,6 +75,7 @@ Full walk-through lands in **P1**.
 - [ ] **22 - Setup/teardown** - `@setup`, `@teardown`, `.as_teardown`
 
 ## Phase E - Architecture & scaling
+
 - [ ] **23 - Architecture** - Scheduler, DAG Processor, API Server, Task Execution API, bundles
 - [ ] **24 - Executors** - Local/Celery/Kubernetes/Edge + multiple-executor routing
 - [ ] **25 - Concurrency hierarchy** - `parallelism` -> pools -> `max_active_tasks` -> `max_active_runs` -> `priority_weight`
@@ -81,6 +86,7 @@ Full walk-through lands in **P1**.
 - [ ] **🔷 P9 - Hardening the BQ pipeline** - retries/timeouts/deadlines, fix a top-level BQ call, observe DAG versioning
 
 ## Phase F - Operations & production quality
+
 - [ ] **29 - Alerting** - `on_failure_callback`, `BaseNotifier` (Slack), listeners, cluster policies
 - [ ] **30 - Observability** - remote logging, StatsD/OpenTelemetry, health checks, OpenLineage
 - [ ] **31 - Data quality** - SQL check operators, `ShortCircuitOperator` circuit breaker
@@ -91,6 +97,7 @@ Full walk-through lands in **P1**.
 - [ ] **🔷 P11 - DQ gate + dbt on BigQuery** - SQL checks as a circuit breaker before load; dbt staging/marts on BQ; CI-gated
 
 ## Phase G - Multi-tenancy & capstone
+
 - [ ] **35 - Multi-tenancy** - teams, DAG-bundle ownership, RBAC/auth managers, `queue`
 - [ ] **🔶 36 - Capstone** - the full BigQuery pipeline end to end (below)
 
