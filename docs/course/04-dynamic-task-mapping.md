@@ -1,49 +1,58 @@
 # Session 04 · W2 Sun — Dynamic Task Mapping
 
-**Goal:** create tasks whose *number* is decided at **run time**, not when the DAG
-is written — Airflow's built-in map/reduce. Understand `.expand`, `.partial`,
-`.expand_kwargs`, `.map`, `.zip`, how mapped instances are addressed by
-`map_index`, and how a downstream task **reduces** all their outputs.
+**Goal:** build a task whose *number of copies* is decided while the DAG runs, not
+when you write it. This is Airflow's built-in map/reduce. You will learn
+`.expand`, `.partial`, `.expand_kwargs`, `.map`, `.zip`, how each copy is numbered
+by `map_index`, and how one later task collects all their results.
 
 ---
 
 ## 0. The problem it solves
 
-You often don't know *how many* tasks you need until the DAG is running: "one task
-per file that landed today", "one per date shard", "one per region returned by an
-API". You can't write those as fixed tasks — the count changes every run.
+Sometimes you do not know how many tasks you need until the run starts. Examples:
+one task per file that landed today, one per date, one per region an API returns.
+The count is different every run, so you cannot write these as a fixed set of
+tasks.
 
-Naively you'd loop in top-level code:
+You might try to loop over the list and create tasks:
 
 ```python
-for f in list_files_now():      # BAD: runs at PARSE time, every 30s, on the DAG processor
+for f in list_files_now():      # WRONG
     process(f)
 ```
 
-That's wrong for two reasons from Session 01: top-level code runs at **parse
-time** (the file list is read on the wrong machine, at the wrong moment), and the
-DAG's shape would change silently between parses. **Dynamic task mapping** is the
-correct mechanism: you declare *one* mapped task at parse time, and Airflow
-expands it into N instances at **run time**, once it actually knows the list.
+This is wrong. Remember from Session 01 that any code at the top level of the file
+runs at **parse time**. Airflow parses the file over and over (roughly every 30
+seconds, on the DAG Processor), long before and separately from any actual run. So
+this loop would:
 
-Mental model — it's **map/reduce**:
+1. read the file list at the wrong time and on the wrong machine, and
+2. change the shape of the DAG on its own every time the list changes.
+
+**Dynamic task mapping** is the right tool. You write **one** task and mark it as
+mappable. When a run starts and the real list is known, Airflow turns that one
+task into N copies.
+
+Think of it as **map/reduce**:
 
 ```
         ┌─ process[0]  (file a)
 list ──▶├─ process[1]  (file b)   ──▶  reduce (one task, gets [r0, r1, r2])
         └─ process[2]  (file c)
-   map (fan-out, N run-time instances)        reduce (fan-in)
+   map (fan-out: N copies made at run time)     reduce (fan-in)
 ```
 
-Each mapped instance is a real, independently-retryable TaskInstance, shown in the
-UI as `process[0]`, `process[1]`, … indexed by **`map_index`** (0-based).
+Every copy is a normal task instance. It can succeed, fail, and retry on its own.
+In the UI the copies appear as `process[0]`, `process[1]`, `process[2]`. That
+number in brackets is the **`map_index`**, starting at 0.
 
 ---
 
-## 1. `.expand()` — fan out over a collection
+## 1. `.expand()` — make one copy per item
 
-`.expand()` is the map step. Call it on a task, passing the argument(s) to vary.
-Airflow creates **one task instance per element**.
+`.expand()` is the map step. You call it on a task and give it the argument you
+want to change from copy to copy. Airflow makes **one copy of the task per item**
+in the list.
 
 ```python
 @task
@@ -53,26 +62,27 @@ def process(name: str) -> str:
 process.expand(name=["a", "b", "c"])   # -> process[0]=A, process[1]=B, process[2]=C
 ```
 
-- The keyword you pass (`name=`) must match a **parameter** of the task function.
-- Each element becomes that parameter's value for one instance.
-- `.expand()` accepts a **list**, a **dict**, or — the real use — an **XComArg**
-  (another task's output). It does **not** accept a plain constant; constants go
-  in `.partial()` (§2).
+- The keyword you pass (`name=`) must be the **name of a parameter** of the task
+  function.
+- Each item in the list becomes that parameter's value for one copy.
+- `.expand()` accepts a **list**, a **dict**, or the output of another task (an
+  **XComArg**). It does **not** accept a plain constant. Constant values go in
+  `.partial()` (§2).
 
-The killer feature: the list can be **another task's return value**, resolved at
-run time:
+The important case is expanding over **another task's output**, which is only
+known at run time:
 
 ```python
-files = list_files()                 # returns e.g. ["a.csv", "b.csv"] at run time
-process.expand(name=files)           # N is whatever list_files() produced this run
+files = list_files()                 # returns e.g. ["a.csv", "b.csv"] during the run
+process.expand(name=files)           # number of copies = length of that list
 ```
 
 ---
 
-## 2. `.partial()` — freeze the constant arguments
+## 2. `.partial()` — set the values that stay the same
 
-A mapped task usually has some args that **vary** (expanded) and some that stay
-**constant** across every instance. Constants go in `.partial()`:
+A mapped task usually has some arguments that **change per copy** and some that are
+**the same for every copy**. The unchanging ones go in `.partial()`:
 
 ```python
 @task
@@ -82,131 +92,139 @@ def load(filename: str, bucket: str, dry_run: bool) -> int:
 load.partial(bucket="raw-zone", dry_run=False).expand(filename=files)
 ```
 
-Here every instance gets the same `bucket` and `dry_run`; only `filename` varies.
-Rule of thumb: **`.partial()` = same for all, `.expand()` = one per element.** Any
-parameter not in `.expand()` must be supplied by `.partial()` (or have a default),
-or parsing fails.
+Every copy gets the same `bucket` and `dry_run`. Only `filename` changes.
+
+Simple rule: **`.partial()` = same for all copies. `.expand()` = one value per
+copy.** Any parameter that is not in `.expand()` must be given by `.partial()` (or
+have a default). If you forget one, parsing fails.
 
 ---
 
-## 3. Expanding over multiple args = Cartesian product
+## 3. Expanding over two arguments = every combination
 
-If you pass **two** expanded arguments, Airflow maps over the **cross product**
-(every combination), not pairwise:
+If you expand over **two** arguments, Airflow makes a copy for **every
+combination** of the two lists, not pairs:
 
 ```python
 add.expand(x=[1, 2], y=[10, 20])
-# -> 4 instances: (1,10) (1,20) (2,10) (2,20)
+# -> 4 copies: (1,10) (1,20) (2,10) (2,20)
 ```
 
-This is easy to blow up — `[100] × [100]` = 10,000 instances. If you want
-**pairwise** (element 0 with element 0, etc.), that's `.zip()` (§5) or
-`.expand_kwargs()` (§4), not two `.expand()` args.
+This grows fast: two lists of 100 items make 10,000 copies. If you instead want
+**pairs** (first with first, second with second), use `.zip()` (§5) or
+`.expand_kwargs()` (§4), not two `.expand()` arguments.
 
 ---
 
-## 4. `.expand_kwargs()` — one dict of kwargs per instance
+## 4. `.expand_kwargs()` — give each copy a full set of arguments
 
-When you want to control **all** arguments of each instance explicitly (and avoid
-the cross product), pass a **list of dicts** — each dict is the full keyword-args
-for one instance:
+Sometimes each copy needs its own combination of several arguments, and you do not
+want every combination. For that, pass a **list of dicts**. Each dict is the
+complete set of keyword arguments for one copy:
 
 ```python
 run_job.expand_kwargs([
     {"query": "SELECT 1", "location": "US"},
     {"query": "SELECT 2", "location": "EU"},
 ])
-# -> 2 instances, each getting exactly that dict as kwargs
+# -> 2 copies, each receiving one whole dict as its arguments
 ```
 
-Use it when instances need *different combinations* of several parameters, or when
-a task returns a list of ready-made kwarg dicts. `.expand()` varies one key at a
-time (cross product); `.expand_kwargs()` varies the whole kwarg set per instance.
+Use it when a copy needs specific values for several parameters together, or when
+a task already returns a list of ready-made argument dicts. Difference from
+`.expand()`: `.expand()` changes **one** argument at a time and makes every
+combination; `.expand_kwargs()` sets the **whole** argument set for each copy.
 
 ---
 
-## 5. `.zip()` — pair multiple sources element-wise
+## 5. `.zip()` — pair up several lists
 
-To combine several lists **pairwise** (like Python's `zip`) into one mappable
-sequence of tuples, call `.zip()` on an XComArg:
+To combine several lists into pairs (like Python's built-in `zip`), call `.zip()`
+on a task's output. It produces a list of tuples that you can then expand over:
 
 ```python
 names = get_names()      # ["a", "b"]
 sizes = get_sizes()      # [10, 20]
-paired = names.zip(sizes)          # -> [("a", 10), ("b", 20)]  (an XComArg)
+paired = names.zip(sizes)          # -> [("a", 10), ("b", 20)]
 
 @task
 def handle(pair: tuple) -> None:
     name, size = pair
     ...
 
-handle.expand(pair=paired)         # 2 instances, not 4
+handle.expand(pair=paired)         # 2 copies (pairs), not 4 (combinations)
 ```
 
-- Stops at the **shortest** input (like `zip`), unless you pass `fillvalue=`.
-- This is how you get pairwise fan-out instead of the §3 cross product.
+- It stops at the **shortest** list, just like `zip`. Pass `fillvalue=` to change
+  that.
+- This gives you pairs instead of the "every combination" behaviour from §3.
 
-## 6. `.map()` — transform each element lazily before expanding
+## 6. `.map()` — change each item before expanding
 
-`.map()` applies a function to **each element** of an XComArg, producing a new
-XComArg — without a separate task. Use it to reshape a task's output into exactly
-what `.expand()` needs:
+`.map()` runs a function on **each item** of a task's output and gives back a new
+list, without adding a separate task. Use it to reshape one task's output into the
+exact form the next task needs:
 
 ```python
-paths = list_files()                       # ["a.csv", "b.csv"]
+paths = list_files()                         # ["a.csv", "b.csv"]
 full = paths.map(lambda p: f"gs://raw/{p}")  # ["gs://raw/a.csv", "gs://raw/b.csv"]
 process.expand(name=full)
 ```
 
-It's the run-time equivalent of a list comprehension on an XCom, evaluated per
-element when the mapping expands. No extra task node appears in the graph.
+It is like a list comprehension, but on a value that only exists during the run.
+It does not create a new box in the graph.
 
 ---
 
-## 7. Reduce — collecting all mapped outputs
+## 7. Reduce — one task that collects all the copies' results
 
-The fan-in is automatic: a **downstream, non-mapped** task that consumes a mapped
-task's output receives the **full list** of every instance's return value:
+The fan-in is automatic. If a **later task that is not mapped** takes a mapped
+task's output as input, it receives the **full list** of results from all the
+copies:
 
 ```python
-counts = process.expand(name=files)   # mapped; each returns an int
+counts = process.expand(name=files)   # mapped; each copy returns an int
 
 @task
-def total(values: list[int]) -> int:  # NOT mapped -> gets [r0, r1, r2, ...]
+def total(values: list[int]) -> int:  # not mapped -> receives [r0, r1, r2, ...]
     return sum(values)
 
 total(counts)
 ```
 
-`total` runs once, after all `process[i]` finish, with a list of their results.
-That's the reduce step — no special API, just consume a mapped XComArg from an
-unmapped task.
+`total` runs **once**, after every `process[i]` has finished, and gets a list of
+their return values. This is the reduce step. There is no special function for it.
+You just feed a mapped task's output into a normal task.
 
 ---
 
-## 8. Guardrails — this fans out real work
+## 8. Guardrails — this creates real work
 
-Each mapped instance is a real scheduled TaskInstance. Fan-out that's unbounded or
-huge can melt the scheduler and the metadata DB. Limits:
+Every copy is a real task the scheduler must track. If the list is huge or has no
+limit, you can overload the scheduler and the database. Controls:
 
-- **`max_map_length`** (core config, default **1024**) — hard ceiling on instances
-  from one `.expand()`. Exceed it and the run **fails loudly** instead of quietly
-  creating a scheduler incident. Raise deliberately, not by accident.
-- **`max_active_tis_per_dag`** (on the task) — cap how many mapped instances of
-  this task run **concurrently** (throttle, without shrinking the total count).
-- **`max_active_tis_per_dagrun`** — same, but per DAG run.
+- **`max_map_length`** (a core setting, default **1024**) is the hard limit on how
+  many copies one `.expand()` may create. If a run tries to make more, it **fails
+  with a clear error** instead of quietly overloading the system. Raise it only on
+  purpose, never by accident.
+- **`max_active_tis_per_dag`** (set on the task) limits how many copies run **at
+  the same time**. It throttles concurrency without changing the total count.
+- **`max_active_tis_per_dagrun`** does the same, but counted per DAG run.
 
-If the list comes from an external source, **bound it** (a `LIMIT`, a slice)
-before it reaches `.expand()`.
+If the list comes from outside (a query, an API), **put a limit on it** (a `LIMIT`
+or a slice) before it reaches `.expand()`.
 
 ---
 
 ## 9. Complete runnable reference DAG
 
-Self-contained (no providers) so it runs anywhere. Shows expand + partial + a
-reduce. Note the **naming**: the Python function is `count_rows`, its `task_id` is
-the *different* string `"row_count"`, so it's unambiguous that `.partial`/`.expand`
-are called on the **function object**, and `"row_count"` is just the id.
+This is self-contained (no providers) so it runs anywhere. It shows `.expand` +
+`.partial` + a reduce.
+
+Notice the **naming**: the Python function is `count_rows`, but its `task_id` is a
+**different** string, `"row_count"`. Keeping them different makes it clear that
+`.partial` and `.expand` are called on the **function**, while `"row_count"` is
+only the id.
 
 ```python
 from __future__ import annotations
@@ -232,13 +250,13 @@ def pipeline():
 
     @task(task_id="row_count")            # task_id != function name (count_rows)
     def count_rows(filename: str, source_zone: str) -> int:
-        # source_zone is constant (partial); filename varies (expand)
+        # source_zone is the same for all copies (partial); filename changes (expand)
         fake_sizes = {"orders.csv": 1200, "users.csv": 300, "products.csv": 80}
         print(f"counting {source_zone}/{filename}")
         return fake_sizes[filename]
 
     @task
-    def total_rows(counts: list[int]) -> int:      # reduce: gets the whole list
+    def total_rows(counts: list[int]) -> int:      # reduce: receives the whole list
         total = sum(counts)
         print(f"total rows across {len(counts)} files = {total:,}")
         return total
@@ -259,7 +277,7 @@ airflow dags test s04_dynamic_mapping_demo 2026-01-01
 ```
 
 In the UI, `row_count` shows as `row_count[0]`, `row_count[1]`, `row_count[2]`, and
-`total_rows` runs once with `[1200, 300, 80]`.
+`total_rows` runs once with the list `[1200, 300, 80]`.
 
 ---
 
@@ -267,63 +285,65 @@ In the UI, `row_count` shows as `row_count[0]`, `row_count[1]`, `row_count[2]`, 
 
 **File:** `dags/task-4/04_dynamic_mapping.py`  ·  **dag_id:** `s04_dynamic_mapping`
 
-Build a DAG that fans out work over a **run-time-determined** list and reduces the
-results — the count of parallel instances must be decided during the run, not
-hard-coded.
+Build a DAG that spreads work across a list whose length is only known during the
+run, then collects the results. The number of parallel copies must come from the
+run, not be hard-coded.
 
 **The problem:**
 
-- A first task produces a **list** at run time (its length is not known when the
-  DAG is written) — e.g. a list of "shards", filenames, or region codes.
-- A second task is **mapped** over that list (one instance per element) and does
-  per-element work returning a value. It must also take at least one **constant**
-  argument that is the same for every instance.
-- A third, **unmapped** task **reduces** all the mapped results into a single
-  output and logs it.
+- A first task returns a **list** during the run. Its length is not known when the
+  DAG is written (for example a list of shards, filenames, or region codes).
+- A second task is **mapped** over that list, so there is one copy per item. Each
+  copy does some work and returns a value. This task must also take at least one
+  argument that is the **same for every copy**.
+- A third task is **not mapped**. It takes all the results from the second task,
+  combines them into one value, and logs it.
 
 **Constraints:**
 
-- The mapped count comes from the first task's output — no literal list passed
-  straight to `.expand()`, and no Python loop creating tasks in top-level code.
-- Constant args use `.partial()`; the varying arg uses `.expand()`.
-- Keep every Python function/variable name **distinct** from its `task_id` string.
-- Passes the integrity gates: `tags`, real `owner`, `retries >= 1`.
+- The number of copies must come from the first task's output. Do not pass a
+  hard-coded list to `.expand()`, and do not create tasks with a Python loop at the
+  top level.
+- Put the constant arguments in `.partial()` and the changing argument in
+  `.expand()`.
+- Keep every Python function/variable name **different** from its `task_id` string.
+- Pass the integrity gates: `tags`, a real `owner`, `retries >= 1`.
 
 **Acceptance criteria:**
 
 - `python dags/task-4/04_dynamic_mapping.py` parses (prints nothing).
 - `airflow dags test s04_dynamic_mapping 2026-01-01` runs green.
-- The UI shows the mapped task as indexed instances `name[0]`, `name[1]`, … whose
-  count equals the length of the first task's output.
-- The reduce task runs **once** and receives the list of all mapped results.
+- The UI shows the mapped task as numbered copies `name[0]`, `name[1]`, … and the
+  number of copies equals the length of the first task's list.
+- The third task runs **once** and receives the list of all the copies' results.
 - `python -m pytest tests/ -v` stays green.
 
 **Stretch (optional):** make the first task return a list of **dicts** and use
-`.expand_kwargs()` instead of `.partial().expand()`; or combine two lists
-pairwise with `.zip()` and confirm you get N instances, not N×M.
+`.expand_kwargs()` instead of `.partial().expand()`. Or combine two lists into
+pairs with `.zip()` and check that you get N copies, not N×M.
 
-**Nudge (only if stuck):** the shape is exactly the §9 reference —
-`producer → mapped_worker.partial(const=...).expand(var=producer()) → reducer`.
-Vary *what* the producer returns and *what* the worker computes.
+**Nudge (only if stuck):** the shape is the same as the §9 reference —
+`producer → worker.partial(const=...).expand(var=producer()) → reducer`. Change
+*what* the producer returns and *what* the worker computes.
 
 ---
 
-## 11. Production tip — bound your fan-out, and make it idempotent
+## 11. Production tip — limit the fan-out, and make each copy safe to re-run
 
-Dynamic mapping is where a DAG quietly turns into a scheduler incident. Two habits
-separate safe fan-out from the kind that melts a cluster:
+Dynamic mapping is a common way for a DAG to accidentally overload a cluster. Two
+habits keep it safe:
 
-- **Always bound the source list.** The number of instances should have a known
-  ceiling — a `LIMIT` on the query, a slice, a validated input. Leave
-  `max_map_length` (1024) as the backstop, not the plan; a run that legitimately
-  needs 5,000 shards should be redesigned (batch them), not have the limit bumped.
-  Use `max_active_tis_per_dag` to throttle concurrency so 500 instances don't all
-  hit a downstream API at once.
-- **Each mapped instance must be idempotent and self-contained.** Instance `[k]`
-  should depend only on *its* element, never on sibling instances or shared
-  mutable state, and re-running it must be safe (write to a per-element,
-  partition-scoped destination). That's what makes a single failed `name[37]`
-  retry cleanly without corrupting the other 200.
+- **Always cap the source list.** The number of copies should have a known upper
+  bound: a `LIMIT` on the query, a slice, or a validated input. Treat
+  `max_map_length` (1024) as a safety net, not your plan. If a run really needs
+  5,000 copies, redesign it to work in batches instead of raising the limit. Use
+  `max_active_tis_per_dag` so that, say, 500 copies do not all hit the same
+  downstream API at once.
+- **Each copy must be independent and safe to re-run.** Copy `[k]` should use only
+  its own item, never the results of other copies or shared changing state.
+  Re-running it must be safe, so write its output to a place tied to that item (a
+  per-item or per-partition destination). That is what lets a single failed
+  `name[37]` retry cleanly without breaking the other copies.
 
 ---
 
@@ -336,8 +356,8 @@ python -m pytest tests/ -v
 git add -A && git commit -m "session 04: dynamic task mapping" && git push
 ```
 
-Done when the DAG runs green, the UI shows the run-time-sized set of mapped
-instances, and the reduce task collects them. Tick **04** in `README.md`.
+Done when the DAG runs green, the UI shows the run-time number of copies, and the
+third task collects them all. Tick **04** in `README.md`.
 
 Sources:
 [Dynamic Task Mapping — Airflow 3.3 docs](https://airflow.apache.org/docs/apache-airflow/stable/authoring-and-scheduling/dynamic-task-mapping.html),
