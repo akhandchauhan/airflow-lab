@@ -33,12 +33,22 @@ API surface. Skip beginner buildup; go deep on *why*.
    `.override(...)`" steps. Full code lives only in the reference (a *different*
    example), never in the spec.
 
-5. **Function/variable name ≠ Airflow id string.** In every example keep the
-   Python name distinct from the `dag_id` / `group_id` / `task_id` it carries.
-   Naming both the same (e.g. `def ingest()` with `group_id="ingest"`) makes it
-   impossible to tell what `ingest.override(...)` attaches to. Use e.g. function
-   `load_source`, `group_id="src"`. `.override`/`.expand` are called on the Python
-   **variable**; the id is the **string** passed in.
+5. **Names must be clearly distinct — not identical AND not scrambled twins.**
+   In every example keep the Python name distinct from the `dag_id` / `group_id` /
+   `task_id` it carries. Two failure modes, both banned:
+   - **Identical:** `def ingest()` with `group_id="ingest"` — impossible to tell what
+     `ingest.override(...)` attaches to.
+   - **Scrambled / near-identical:** `def full_refresh()` with `task_id="refresh_full"`,
+     or names differing by one word-swap or letter. This is *worse* than identical —
+     it reads like a typo and the eye can't separate them.
+   **The test is not "are the strings different?" — it is "would a tired reader
+   instantly tell these apart?"** If two names are anagrams, reorderings, or differ
+   only by a suffix like `_2`, that FAILS.
+   **Convention to follow:** `task_id` = a plain noun (`full_refresh`); the function
+   that carries it = a verb form (`run_full_refresh`); the variable holding the task
+   = its role (`path`, `guard`, `large_path`). A `@task.branch` returns the **noun**
+   `task_id` string, never the function name. `.override`/`.expand`/`.partial` are
+   called on the Python **variable**; the id is the **string** passed in.
 
 ## Session ritual
 
