@@ -8,8 +8,8 @@ take the points, keep the streak alive.
 
 | | |
 |---|---|
-| **Total points** | 170 |
-| **Current streak** | 0 days — start today |
+| **Total points** | 180 |
+| **Current streak** | 1 day |
 | **Longest streak** | 3 days |
 | **Last active** | 2026-09-06 |
 
@@ -37,7 +37,7 @@ Reference pages (read anytime): [xcom-basics](xcom-basics.md) · [gcp-project](g
 ## Now → next bytes
 
 ### 04 · Branching & trigger rules → [note](04-branching-trigger-rules.md)
-- [ ] **4.1** `@task.branch` — read §1, run the tiny branch example · *10*
+- [x] **4.1** `@task.branch` — read §1, run the tiny branch example · *10* ✅ (also did the §1 XCom challenge)
 - [ ] **4.2** `@task.short_circuit` — read §2, run the guard example · *10*
 - [ ] **4.3** `TriggerRule` + the join gotcha — read §3–§4 · *10*
 - [ ] **4.4** Build the BigQuery branching DAG — §7 spec, CI-green · *20*
