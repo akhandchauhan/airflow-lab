@@ -50,6 +50,13 @@ API surface. Skip beginner buildup; go deep on *why*.
   BigQuery → **production tip** → verify (rows + bytes billed) → push.
 - **Every session ends with ONE production tip** — concept *and* practical. (A
   practical once shipped without one; that was a miss.)
+- **From Session 04 onward, exercises use BigQuery, not generic fake-data DAGs.**
+  The user has GCP creds and wants production-shaped, hands-on work in every
+  session. The complete reference DAG AND the build spec must run against a real
+  BigQuery table (`bigquery-public-data.*` or the user's own dataset) via
+  `google_cloud_default`, with every query cost-capped. Keep the *theory* simple
+  (plain English + one running analogy); make the *practice* real BigQuery. (The
+  earlier no-provider "runs anywhere" style is only for Sessions 01–03.)
 
 ## Airflow conventions in this repo
 

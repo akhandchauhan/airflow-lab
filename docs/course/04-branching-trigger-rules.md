@@ -161,16 +161,23 @@ the fork, `publish` is a junction that proceeds if either road got through, and
 
 ---
 
-## 6. Complete runnable reference DAG
+## 6. Complete runnable reference DAG (BigQuery)
 
-Self-contained (no providers) so it runs anywhere. It shows all four pieces:
-short-circuit guard → branch → join with the right trigger rule → always-run notify.
+Uses the `google_cloud_default` connection from **P1** and the Austin bikeshare
+table. It shows all four pieces on real data: short-circuit guard → branch → join
+with the right trigger rule → always-run notify. Every query is cost-capped.
 
 ```python
 from __future__ import annotations
 
 import pendulum
 from airflow.sdk import dag, task, TriggerRule
+from airflow.providers.google.cloud.hooks.bigquery import BigQueryHook
+from airflow.providers.google.cloud.operators.bigquery import BigQueryInsertJobOperator
+
+SRC = "bigquery-public-data.austin_bikeshare.bikeshare_trips"
+CAP = "100000000"          # 100 MB max bytes billed per query
+BIG_THRESHOLD = 1_000_000  # above this many trips, take the "large" path
 
 
 @dag(
@@ -178,74 +185,101 @@ from airflow.sdk import dag, task, TriggerRule
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
     schedule=None,
     catchup=False,
-    tags=["session-04", "branching"],
+    tags=["session-04", "branching", "bigquery"],
     default_args={"owner": "akhand", "retries": 1},
 )
 def pipeline():
 
+    @task
+    def count_trips() -> int:
+        hook = BigQueryHook(gcp_conn_id="google_cloud_default", location="US", use_legacy_sql=False)
+        row = hook.get_first(f"SELECT COUNT(*) FROM `{SRC}`")   # COUNT = 0 bytes
+        return int(row[0])
+
     @task.short_circuit
-    def has_new_data() -> bool:
-        new_rows = 5000                  # pretend we counted today's source rows
-        print(f"new rows today = {new_rows}")
-        return new_rows > 0              # False -> skip everything below
+    def has_rows(total: int) -> bool:
+        print(f"total trips = {total:,}")
+        return total > 0                # 0 rows -> skip everything below
 
     @task.branch
-    def choose_load() -> str:
-        new_rows = 5000
+    def choose_by_volume(total: int) -> str:
         # return the TASK_ID string of the path to run; the other is skipped
-        return "refresh_full" if new_rows > 1000 else "load_incremental"
+        return "summarize_large" if total > BIG_THRESHOLD else "summarize_small"
 
-    @task(task_id="refresh_full")
-    def full_refresh() -> None:
-        print("path: full refresh")
+    summarize_large = BigQueryInsertJobOperator(
+        task_id="summarize_large",
+        gcp_conn_id="google_cloud_default",
+        location="US",
+        configuration={"query": {
+            "query": f"SELECT start_station_name, COUNT(*) AS trips FROM `{SRC}` "
+                     f"GROUP BY start_station_name ORDER BY trips DESC LIMIT 10",
+            "useLegacySql": False, "maximumBytesBilled": CAP,
+        }},
+    )
 
-    @task(task_id="load_incremental")
-    def incremental_load() -> None:
-        print("path: incremental load")
+    summarize_small = BigQueryInsertJobOperator(
+        task_id="summarize_small",
+        gcp_conn_id="google_cloud_default",
+        location="US",
+        configuration={"query": {
+            "query": f"SELECT start_station_name, COUNT(*) AS trips FROM `{SRC}` "
+                     f"GROUP BY start_station_name ORDER BY trips DESC LIMIT 3",
+            "useLegacySql": False, "maximumBytesBilled": CAP,
+        }},
+    )
 
     @task(trigger_rule=TriggerRule.NONE_FAILED_MIN_ONE_SUCCESS)
     def publish() -> None:               # join after the branch
-        print("publishing load results")
+        print("published summary")
 
     @task(trigger_rule=TriggerRule.ALL_DONE)
     def notify() -> None:                # always runs, even on skip/fail
         print("pipeline finished — sending status")
 
-    gate = has_new_data()
-    branch = choose_load()
+    total = count_trips()
+    gate = has_rows(total)
+    decision = choose_by_volume(total)
 
-    gate >> branch >> [full_refresh(), incremental_load()] >> publish() >> notify()
+    gate >> decision >> [summarize_large, summarize_small] >> publish() >> notify()
 
 
 pipeline()
 ```
 
-Run it:
+Run it (needs the P1 BigQuery connection):
 
 ```bash
 python dags/task-4/s04_branching_demo.py
 airflow dags test s04_branching_demo 2026-01-01
 ```
 
-In the UI you'll see one branch **skipped** (grey), the other green, `publish` still
-running because of its trigger rule, and `notify` running at the end. Change
-`new_rows` to `0` and re-run: everything after the guard turns skipped.
+Austin bikeshare has ~2.3M trips (> `BIG_THRESHOLD`), so `summarize_large` runs and
+`summarize_small` is **skipped** (grey in the UI); `publish` still runs because of
+its trigger rule; `notify` runs at the end. Lower `BIG_THRESHOLD` to flip the
+branch, and check **BigQuery Job history** — `count_trips` = 0 B, the summary query
+scans only the station column, under the cap.
 
 ---
 
-## 7. Build spec — your challenge (no solution)
+## 7. Build spec — your challenge (BigQuery, no solution)
 
 **File:** `dags/task-4/04_branching.py`  ·  **dag_id:** `s04_branching`
 
-Build a DAG that makes a run-time decision, protects an expensive step with a
-guard, and always finishes with a status task.
+Build a DAG that queries BigQuery, makes a run-time decision from the result,
+protects an expensive step with a guard, and always finishes with a status task.
+Use `bigquery-public-data.austin_bikeshare.bikeshare_trips` (or a table in your own
+dataset).
 
 **The problem:**
 
-- A **guard** task runs first and decides whether the pipeline should continue at
-  all. If its condition is not met, everything after it must be **skipped**.
-- If it continues, a **branch** task chooses **one of two** downstream paths based
-  on a condition; the path not chosen must be **skipped**.
+- A first task reads a **real metric from BigQuery** (for example a row count, or a
+  count of trips for some condition).
+- A **guard** decides from that metric whether the pipeline should continue. If the
+  condition is not met (e.g. the metric is 0), everything after it must be
+  **skipped**.
+- If it continues, a **branch** chooses **one of two** BigQuery query paths based on
+  the metric (e.g. a heavier aggregation vs a lighter one); the path not chosen must
+  be **skipped**.
 - Both paths lead into a single **join** task that must still run even though one
   branch was skipped.
 - A final **status** task must run **no matter what** happened above (success,
@@ -253,6 +287,10 @@ guard, and always finishes with a status task.
 
 **Constraints:**
 
+- The BigQuery work uses the Google provider — `BigQueryInsertJobOperator` for the
+  query paths and/or `BigQueryHook` for reading the metric — via
+  `google_cloud_default`.
+- **Every query is cost-capped** (`maximumBytesBilled`); no `SELECT *`.
 - Use `@task.short_circuit` for the guard and `@task.branch` for the path choice.
 - The join and the status task must set the correct `TriggerRule` (think about what
   a skipped branch does to a default-rule join).
@@ -267,6 +305,9 @@ guard, and always finishes with a status task.
 - `airflow dags test s04_branching 2026-01-01` runs green.
 - In the graph: exactly one branch runs, the other is skipped, the join still runs,
   and the status task runs.
+- **BigQuery Job history** shows your queries ran within the byte cap.
+- Flipping the guard's condition (or the branch threshold) changes the outcome as
+  expected.
 - Flip the guard's condition and confirm the whole pipeline below it is skipped —
   but the always-run status task still runs.
 - `python -m pytest tests/ -v` stays green.
