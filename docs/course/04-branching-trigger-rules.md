@@ -6,11 +6,11 @@ on what happened before it.
 
 Three tools:
 
-| Tool | Plain meaning |
-|---|---|
-| `@task.branch` | a **fork in the road** — pick which path to take; the other path is skipped |
-| `@task.short_circuit` | a **stop sign** — if a check is False, skip everything after it |
-| `TriggerRule` | the rule for **when** a task may start (default: only after all its inputs succeed) |
+| Tool                  | Plain meaning                                                                       |
+| --------------------- | ----------------------------------------------------------------------------------- |
+| `@task.branch`        | a **fork in the road** — pick which path to take; the other path is skipped         |
+| `@task.short_circuit` | a **stop sign** — if a check is False, skip everything after it                     |
+| `TriggerRule`         | the rule for **when** a task may start (default: only after all its inputs succeed) |
 
 ---
 
@@ -20,9 +20,9 @@ Three tools:
   you don't take is closed off (its tasks are **skipped**).
 - **Short-circuit** = a "BRIDGE OUT" barrier. If the bridge is out (your check
   returns False), you stop, and everything further down that road is cancelled.
-- **Trigger rule** = the rule at a junction for *when you're allowed to go*.
+- **Trigger rule** = the rule at a junction for _when you're allowed to go_.
   Normally: "go only when all the roads feeding in are clear." But you can change
-  it — for example a cleanup crew that goes in *no matter what happened*.
+  it — for example a cleanup crew that goes in _no matter what happened_.
 
 Keep this picture; every section below maps back to it.
 
@@ -52,17 +52,6 @@ def run_incremental_load() -> None:
 path = pick_load_path()
 path >> [run_full_refresh(), run_incremental_load()]   # branch returns ONE of these task_ids
 ```
-
-Read the names carefully — they are deliberately kept apart:
-
-- **`pick_load_path`** is the branch function. **`path`** is the variable holding it.
-- The two worker functions are **`run_full_refresh`** and **`run_incremental_load`**.
-- Their **`task_id`s** are the plain nouns **`"full_refresh"`** and
-  **`"incremental_load"`** — and those are exactly the strings the branch returns.
-
-So the branch returns a **`task_id` string** (`"full_refresh"`), *not* the function
-(`run_full_refresh`). Keeping the function name (`run_…`) different from the id
-(the noun) is what makes that obvious. Other points:
 
 - You can return a **list** of task_ids to run several paths at once.
 - The branch and its choices must be **directly wired** (`path >> [a, b]`), or
@@ -111,13 +100,13 @@ def cleanup() -> None:
 
 The ones you'll actually use:
 
-| Trigger rule | Task runs when… | Use it for |
-|---|---|---|
-| `ALL_SUCCESS` (default) | every upstream succeeded | normal flow |
-| `NONE_FAILED_MIN_ONE_SUCCESS` | no upstream failed **and** ≥1 succeeded (skips OK) | a **join after a branch** |
-| `ALL_DONE` | every upstream finished (success, fail, or skip) | **cleanup / notify** that must always run |
-| `ONE_SUCCESS` | any one upstream succeeded | fan-in where any success is enough |
-| `ALL_FAILED` | every upstream failed | run only on total failure |
+| Trigger rule                  | Task runs when…                                    | Use it for                                |
+| ----------------------------- | -------------------------------------------------- | ----------------------------------------- |
+| `ALL_SUCCESS` (default)       | every upstream succeeded                           | normal flow                               |
+| `NONE_FAILED_MIN_ONE_SUCCESS` | no upstream failed **and** ≥1 succeeded (skips OK) | a **join after a branch**                 |
+| `ALL_DONE`                    | every upstream finished (success, fail, or skip)   | **cleanup / notify** that must always run |
+| `ONE_SUCCESS`                 | any one upstream succeeded                         | fan-in where any success is enough        |
+| `ALL_FAILED`                  | every upstream failed                              | run only on total failure                 |
 
 ---
 
@@ -149,7 +138,7 @@ the #1 branching bug.
 1. **Guard (short-circuit):** first count today's new rows in the source. If it's
    **0**, short-circuit → skip the whole load. No point scanning and writing when
    nothing arrived (and it saves cost).
-2. **Branch:** if there *is* data, decide *how* to load based on volume — a small
+2. **Branch:** if there _is_ data, decide _how_ to load based on volume — a small
    batch takes the `full_refresh` path, a large one takes `incremental_load`.
 3. **Join (publish):** after whichever path ran, one task publishes/marks the load
    done — with `NONE_FAILED_MIN_ONE_SUCCESS`, so the skipped branch doesn't skip it.
@@ -273,7 +262,7 @@ scans only the station column, under the cap.
 
 ## 7. Build spec — your challenge (BigQuery, no solution)
 
-**File:** `dags/task-4/04_branching.py`  ·  **dag_id:** `s04_branching`
+**File:** `dags/task-4/04_branching.py` · **dag_id:** `s04_branching`
 
 Build a DAG that queries BigQuery, makes a run-time decision from the result,
 protects an expensive step with a guard, and always finishes with a status task.
