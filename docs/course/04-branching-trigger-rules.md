@@ -36,28 +36,36 @@ below the branch is marked **skipped**.
 
 ```python
 @task.branch
-def choose_path() -> str:
+def pick_load_path() -> str:
     row_count = 5000
-    # return the task_id string of the branch to run; the other is skipped
-    return "refresh_full" if row_count > 1000 else "load_incremental"
+    # return the TASK_ID string of the path to run; the other is skipped
+    return "full_refresh" if row_count > 1000 else "incremental_load"
 
-@task(task_id="refresh_full")
-def full_refresh() -> None:
+@task(task_id="full_refresh")
+def run_full_refresh() -> None:
     print("full refresh")
 
-@task(task_id="load_incremental")
-def incremental_load() -> None:
+@task(task_id="incremental_load")
+def run_incremental_load() -> None:
     print("incremental load")
 
-branch = choose_path()
-branch >> [full_refresh(), incremental_load()]   # branch returns ONE of these task_ids
+path = pick_load_path()
+path >> [run_full_refresh(), run_incremental_load()]   # branch returns ONE of these task_ids
 ```
 
-- It returns a **`task_id` string**, not the function. (That's why the task_ids here
-  — `"refresh_full"`, `"load_incremental"` — are written out explicitly: the branch
-  returns those strings.)
-- You can return a **list** of task_ids to run several paths.
-- The branch and its choices must be **directly wired** (`branch >> [a, b]`), or
+Read the names carefully — they are deliberately kept apart:
+
+- **`pick_load_path`** is the branch function. **`path`** is the variable holding it.
+- The two worker functions are **`run_full_refresh`** and **`run_incremental_load`**.
+- Their **`task_id`s** are the plain nouns **`"full_refresh"`** and
+  **`"incremental_load"`** — and those are exactly the strings the branch returns.
+
+So the branch returns a **`task_id` string** (`"full_refresh"`), *not* the function
+(`run_full_refresh`). Keeping the function name (`run_…`) different from the id
+(the noun) is what makes that obvious. Other points:
+
+- You can return a **list** of task_ids to run several paths at once.
+- The branch and its choices must be **directly wired** (`path >> [a, b]`), or
   Airflow can't skip the right ones.
 
 ---
@@ -142,7 +150,7 @@ the #1 branching bug.
    **0**, short-circuit → skip the whole load. No point scanning and writing when
    nothing arrived (and it saves cost).
 2. **Branch:** if there *is* data, decide *how* to load based on volume — a small
-   batch takes the `refresh_full` path, a large one takes `load_incremental`.
+   batch takes the `full_refresh` path, a large one takes `incremental_load`.
 3. **Join (publish):** after whichever path ran, one task publishes/marks the load
    done — with `NONE_FAILED_MIN_ONE_SUCCESS`, so the skipped branch doesn't skip it.
 4. **Notify (all_done):** a final task logs the outcome and (later) sends a Slack
@@ -150,8 +158,8 @@ the #1 branching bug.
    short-circuited.
 
 ```
-count_new_rows ─(short-circuit: 0 rows? stop)─▶ choose_load ─┬─▶ refresh_full ──┐
-                                                              └─▶ load_incr ─────┴─▶ publish ─▶ notify
+count_new_rows ─(short-circuit: 0 rows? stop)─▶ choose_load ─┬─▶ full_refresh ────┐
+                                                              └─▶ incremental_load ┴─▶ publish ─▶ notify
                                                                         (NONE_FAILED_MIN_ONE_SUCCESS)   (ALL_DONE)
 ```
 
@@ -206,7 +214,9 @@ def pipeline():
         # return the TASK_ID string of the path to run; the other is skipped
         return "summarize_large" if total > BIG_THRESHOLD else "summarize_small"
 
-    summarize_large = BigQueryInsertJobOperator(
+    # variable name (large_path) is kept different from the task_id ("summarize_large"),
+    # which is the string the branch returns
+    large_path = BigQueryInsertJobOperator(
         task_id="summarize_large",
         gcp_conn_id="google_cloud_default",
         location="US",
@@ -217,7 +227,7 @@ def pipeline():
         }},
     )
 
-    summarize_small = BigQueryInsertJobOperator(
+    small_path = BigQueryInsertJobOperator(
         task_id="summarize_small",
         gcp_conn_id="google_cloud_default",
         location="US",
@@ -237,10 +247,10 @@ def pipeline():
         print("pipeline finished — sending status")
 
     total = count_trips()
-    gate = has_rows(total)
+    guard = has_rows(total)
     decision = choose_by_volume(total)
 
-    gate >> decision >> [summarize_large, summarize_small] >> publish() >> notify()
+    guard >> decision >> [large_path, small_path] >> publish() >> notify()
 
 
 pipeline()
