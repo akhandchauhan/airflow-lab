@@ -84,8 +84,17 @@ API surface. Skip beginner buildup; go deep on *why*.
   session. The complete reference DAG AND the build spec must run against a real
   BigQuery table (`bigquery-public-data.*` or the user's own dataset) via
   `google_cloud_default`, with every query cost-capped. Keep the *theory* simple
-  (plain English + one running analogy); make the *practice* real BigQuery. (The
-  earlier no-provider "runs anywhere" style is only for Sessions 01–03.)
+  (plain English + one running analogy); make the *practice* real BigQuery.
+- **Every code example is a COMPLETE, runnable DAG — never a bare fragment.** Each
+  code block must include imports, the `@dag` definition, the tasks, the wiring, and
+  the trailing `pipeline()` call, with a `# dags/task-N/<file>.py` header comment and
+  a `airflow dags test <dag_id> <date>` run line. The user must be able to copy any
+  block, save it, and run it. No snippets that reference undefined names.
+- **Per-section concept demos may be minimal & self-contained** (no provider) to
+  isolate ONE mechanic and run in seconds — this is allowed even from Session 04 on.
+  Only the **complete reference** (the combined "§ Complete runnable reference" DAG)
+  and the **build spec** must be BigQuery. So a topic can have tiny no-BigQuery
+  runnable demos per concept, then one full BigQuery reference that combines them.
 
 ## Airflow conventions in this repo
 

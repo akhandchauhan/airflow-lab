@@ -26,6 +26,10 @@ Three tools:
 
 Keep this picture; every section below maps back to it.
 
+> Every example below is a **complete, runnable DAG** — save it under `dags/task-4/`
+> and run it. §1–§3 are deliberately minimal (one concept each, no BigQuery, run in
+> seconds). §6 is the full BigQuery version that combines them.
+
 ---
 
 ## 1. `@task.branch` — pick a path
@@ -35,27 +39,54 @@ A branch task is a normal `@task`, but instead of returning data it **returns th
 below the branch is marked **skipped**.
 
 ```python
-@task.branch
-def pick_load_path() -> str:
-    row_count = 5000
-    # return the TASK_ID string of the path to run; the other is skipped
-    return "full_refresh" if row_count > 1000 else "incremental_load"
+# dags/task-4/s04_branch_example.py
+from __future__ import annotations
 
-@task(task_id="full_refresh")
-def run_full_refresh() -> None:
-    print("full refresh")
+import pendulum
+from airflow.sdk import dag, task
 
-@task(task_id="incremental_load")
-def run_incremental_load() -> None:
-    print("incremental load")
 
-path = pick_load_path()
-path >> [run_full_refresh(), run_incremental_load()]   # branch returns ONE of these task_ids
+@dag(
+    dag_id="s04_branch_example",
+    start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
+    schedule=None,
+    catchup=False,
+    tags=["session-04", "branching"],
+    default_args={"owner": "akhand", "retries": 1},
+)
+def pipeline():
+
+    @task.branch
+    def pick_load_path() -> str:
+        row_count = 5000
+        # return the TASK_ID string of the path to run; the other is skipped
+        return "full_refresh" if row_count > 1000 else "incremental_load"
+
+    @task(task_id="full_refresh")
+    def run_full_refresh() -> None:
+        print("full refresh")
+
+    @task(task_id="incremental_load")
+    def run_incremental_load() -> None:
+        print("incremental load")
+
+    path = pick_load_path()
+    path >> [run_full_refresh(), run_incremental_load()]   # branch returns ONE of these task_ids
+
+
+pipeline()
+```
+
+Run it → `run_full_refresh` runs, `run_incremental_load` is skipped:
+
+```bash
+airflow dags test s04_branch_example 2026-01-01
 ```
 
 - You can return a **list** of task_ids to run several paths at once.
 - The branch and its choices must be **directly wired** (`path >> [a, b]`), or
   Airflow can't skip the right ones.
+- Flip `row_count` to `500` and re-run — the other path is chosen instead.
 
 ---
 
@@ -67,14 +98,46 @@ A short-circuit task returns **True or False**:
 - **False** → **skip everything downstream**.
 
 ```python
-@task.short_circuit
-def has_new_data() -> bool:
-    new_rows = 0
-    print(f"new rows today = {new_rows}")
-    return new_rows > 0        # 0 rows -> False -> skip the rest of the pipeline
+# dags/task-4/s04_short_circuit_example.py
+from __future__ import annotations
 
-has_new_data() >> load_task()
+import pendulum
+from airflow.sdk import dag, task
+
+
+@dag(
+    dag_id="s04_short_circuit_example",
+    start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
+    schedule=None,
+    catchup=False,
+    tags=["session-04", "branching"],
+    default_args={"owner": "akhand", "retries": 1},
+)
+def pipeline():
+
+    @task.short_circuit
+    def has_new_data() -> bool:
+        new_rows = 0
+        print(f"new rows today = {new_rows}")
+        return new_rows > 0        # 0 -> False -> skip everything below
+
+    @task
+    def load_data() -> None:
+        print("loading data")
+
+    has_new_data() >> load_data()
+
+
+pipeline()
 ```
+
+Run it → with `new_rows = 0` the guard returns False, so `load_data` is **skipped**:
+
+```bash
+airflow dags test s04_short_circuit_example 2026-01-01
+```
+
+Set `new_rows = 5` and re-run — the guard passes and `load_data` runs.
 
 Use it as a **guard**: "only run the expensive work if there's actually something
 to do." This is the single biggest cost saver — don't scan and load when today's
@@ -88,17 +151,53 @@ whether to continue at all.**
 ## 3. `TriggerRule` — when is a task allowed to run?
 
 By default a task runs only when **all** its upstream tasks **succeeded**. That
-rule is called `all_success`. You can change it per task:
+rule is called `all_success`. You can change it per task. This DAG proves it: the
+first task **fails on purpose**, and `cleanup` still runs because of `ALL_DONE`:
 
 ```python
-from airflow.sdk import TriggerRule
+# dags/task-4/s04_trigger_rule_example.py
+from __future__ import annotations
 
-@task(trigger_rule=TriggerRule.ALL_DONE)
-def cleanup() -> None:
-    ...
+import pendulum
+from airflow.sdk import dag, task, TriggerRule
+
+
+@dag(
+    dag_id="s04_trigger_rule_example",
+    start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
+    schedule=None,
+    catchup=False,
+    tags=["session-04", "branching"],
+    default_args={"owner": "akhand", "retries": 0},
+)
+def pipeline():
+
+    @task
+    def load_data() -> None:
+        raise ValueError("pretend the load failed")   # deliberately fails
+
+    @task(trigger_rule=TriggerRule.ALL_DONE)
+    def cleanup() -> None:
+        print("cleanup runs no matter what")          # ALL_DONE -> runs even on failure
+
+    load_data() >> cleanup()
+
+
+pipeline()
 ```
 
-The ones you'll actually use:
+Run it → `load_data` fails, but `cleanup` still runs:
+
+```bash
+airflow dags test s04_trigger_rule_example 2026-01-01
+```
+
+(The run is marked failed because `load_data` failed — that's expected. The point is
+`cleanup` **still ran**. Remove the `trigger_rule=...` line, re-run, and `cleanup`
+gets **skipped** instead, because the default `ALL_SUCCESS` needs its parent to
+succeed.)
+
+The trigger rules you'll actually use:
 
 | Trigger rule                  | Task runs when…                                    | Use it for                                |
 | ----------------------------- | -------------------------------------------------- | ----------------------------------------- |
@@ -118,8 +217,8 @@ skipped parent — and with the default `all_success`, the join gets skipped too
 even though the other branch succeeded.
 
 ```
-choose_path ──▶ refresh_full ─────┐
-           └──▶ load_incremental ─┴──▶ publish   # one parent is always skipped
+pick_load_path ──▶ full_refresh ─────┐
+              └──▶ incremental_load ─┴──▶ publish   # one parent is always skipped
 ```
 
 Fix: give the join `trigger_rule=TriggerRule.NONE_FAILED_MIN_ONE_SUCCESS`. It means
