@@ -26,9 +26,10 @@ Three tools:
 
 Keep this picture; every section below maps back to it.
 
-> Every example below is a **complete, runnable DAG** — save it under `dags/task-4/`
-> and run it. §1–§3 are deliberately minimal (one concept each, no BigQuery, run in
-> seconds). §6 is the full BigQuery version that combines them.
+> The snippets in §1–§4 **highlight one mechanic each** — just the lines that
+> matter, not a full DAG. The single complete, runnable DAG that wires everything
+> together is the BigQuery reference in **§6**. After each mechanic, a **🎯 Challenge**
+> asks you to reuse something from an earlier session.
 
 ---
 
@@ -39,54 +40,33 @@ A branch task is a normal `@task`, but instead of returning data it **returns th
 below the branch is marked **skipped**.
 
 ```python
-# dags/task-4/s04_branch_example.py
-from __future__ import annotations
+@task.branch                                   # ← THE MECHANIC
+def check_count() -> str:
+    rows = 5000
+    return "incremental_load" if rows > 500 else "full_reload"   # returns a TASK_ID string
 
-import pendulum
-from airflow.sdk import dag, task
+@task(task_id="incremental_load")
+def run_incremental_load():
+    print("incremental load")
 
+@task(task_id="full_reload")
+def run_full_reload():
+    print("truncate + full reload")
 
-@dag(
-    dag_id="s04_branch_example",
-    start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
-    schedule=None,
-    catchup=False,
-    tags=["session-04", "branching"],
-    default_args={"owner": "akhand", "retries": 1},
-)
-def pipeline():
-
-    @task.branch
-    def pick_load_path() -> str:
-        row_count = 5000
-        # return the TASK_ID string of the path to run; the other is skipped
-        return "full_refresh" if row_count > 1000 else "incremental_load"
-
-    @task(task_id="full_refresh")
-    def run_full_refresh() -> None:
-        print("full refresh")
-
-    @task(task_id="incremental_load")
-    def run_incremental_load() -> None:
-        print("incremental load")
-
-    path = pick_load_path()
-    path >> [run_full_refresh(), run_incremental_load()]   # branch returns ONE of these task_ids
-
-
-pipeline()
+path = check_count()
+path >> [run_incremental_load(), run_full_reload()]   # the returned task_id runs; the other is skipped
 ```
 
-Run it → `run_full_refresh` runs, `run_incremental_load` is skipped:
-
-```bash
-airflow dags test s04_branch_example 2026-01-01
-```
-
-- You can return a **list** of task_ids to run several paths at once.
-- The branch and its choices must be **directly wired** (`path >> [a, b]`), or
+- The branch returns a **`task_id` string**, not the function object.
+- Return a **list** of task_ids to run several paths at once.
+- The branch and its options must be **directly wired** (`path >> [a, b]`), or
   Airflow can't skip the right ones.
-- Flip `row_count` to `500` and re-run — the other path is chosen instead.
+
+> **🎯 Challenge — reuse Session 01 (XCom hand-off).** The branch above reads a
+> hardcoded `rows`. Replace it: add an upstream `@task` that **returns** the row
+> count, and make `check_count(count)` receive that value as an argument — the
+> return→XCom hand-off from Session 01. The branch must now decide from the real
+> returned value, not a constant. (Refresh: [xcom-basics](xcom-basics.md).)
 
 ---
 
@@ -98,46 +78,17 @@ A short-circuit task returns **True or False**:
 - **False** → **skip everything downstream**.
 
 ```python
-# dags/task-4/s04_short_circuit_example.py
-from __future__ import annotations
+@task.short_circuit                # ← THE MECHANIC
+def has_new_data() -> bool:
+    new_rows = 0
+    return new_rows > 0            # return False → EVERYTHING downstream is skipped
 
-import pendulum
-from airflow.sdk import dag, task
+@task
+def load_data():
+    print("loading data")
 
-
-@dag(
-    dag_id="s04_short_circuit_example",
-    start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
-    schedule=None,
-    catchup=False,
-    tags=["session-04", "branching"],
-    default_args={"owner": "akhand", "retries": 1},
-)
-def pipeline():
-
-    @task.short_circuit
-    def has_new_data() -> bool:
-        new_rows = 0
-        print(f"new rows today = {new_rows}")
-        return new_rows > 0        # 0 -> False -> skip everything below
-
-    @task
-    def load_data() -> None:
-        print("loading data")
-
-    has_new_data() >> load_data()
-
-
-pipeline()
+has_new_data() >> load_data()
 ```
-
-Run it → with `new_rows = 0` the guard returns False, so `load_data` is **skipped**:
-
-```bash
-airflow dags test s04_short_circuit_example 2026-01-01
-```
-
-Set `new_rows = 5` and re-run — the guard passes and `load_data` runs.
 
 Use it as a **guard**: "only run the expensive work if there's actually something
 to do." This is the single biggest cost saver — don't scan and load when today's
@@ -146,56 +97,34 @@ source is empty.
 Branch vs short-circuit: **branch chooses between paths; short-circuit decides
 whether to continue at all.**
 
+> **🎯 Challenge — reuse Session 03 (TaskGroups).** Put the downstream work inside a
+> `@task_group` (an `extract` task + a `load` task grouped together) and wire the
+> short-circuit guard **before** the group. Confirm that when the guard returns
+> False, the **whole group** is skipped in one shot — not task by task.
+
 ---
 
 ## 3. `TriggerRule` — when is a task allowed to run?
 
-By default a task runs only when **all** its upstream tasks **succeeded**. That
-rule is called `all_success`. You can change it per task. This DAG proves it: the
-first task **fails on purpose**, and `cleanup` still runs because of `ALL_DONE`:
+By default a task runs only when **all** its upstream tasks **succeeded** — that
+rule is `all_success`. You change it per task with `trigger_rule`:
 
 ```python
-# dags/task-4/s04_trigger_rule_example.py
-from __future__ import annotations
+from airflow.sdk import TriggerRule
 
-import pendulum
-from airflow.sdk import dag, task, TriggerRule
+@task
+def load_data():
+    print("loading data")
 
+@task(trigger_rule=TriggerRule.ALL_DONE)     # ← THE MECHANIC: change WHEN a task may run
+def cleanup():
+    print("cleanup runs even if load_data FAILED or was skipped")
 
-@dag(
-    dag_id="s04_trigger_rule_example",
-    start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
-    schedule=None,
-    catchup=False,
-    tags=["session-04", "branching"],
-    default_args={"owner": "akhand", "retries": 0},
-)
-def pipeline():
-
-    @task
-    def load_data() -> None:
-        raise ValueError("pretend the load failed")   # deliberately fails
-
-    @task(trigger_rule=TriggerRule.ALL_DONE)
-    def cleanup() -> None:
-        print("cleanup runs no matter what")          # ALL_DONE -> runs even on failure
-
-    load_data() >> cleanup()
-
-
-pipeline()
+load_data() >> cleanup()
 ```
 
-Run it → `load_data` fails, but `cleanup` still runs:
-
-```bash
-airflow dags test s04_trigger_rule_example 2026-01-01
-```
-
-(The run is marked failed because `load_data` failed — that's expected. The point is
-`cleanup` **still ran**. Remove the `trigger_rule=...` line, re-run, and `cleanup`
-gets **skipped** instead, because the default `ALL_SUCCESS` needs its parent to
-succeed.)
+With `ALL_DONE`, `cleanup` runs no matter what happens to `load_data`. On the
+default `ALL_SUCCESS`, a failed or skipped `load_data` would skip `cleanup` too.
 
 The trigger rules you'll actually use:
 
@@ -206,6 +135,13 @@ The trigger rules you'll actually use:
 | `ALL_DONE`                    | every upstream finished (success, fail, or skip)   | **cleanup / notify** that must always run |
 | `ONE_SUCCESS`                 | any one upstream succeeded                         | fan-in where any success is enough        |
 | `ALL_FAILED`                  | every upstream failed                              | run only on total failure                 |
+
+> **🎯 Challenge — reuse Session 02 (parallel wiring).** Using the parallel style
+> from Session 02 (`[task_a, task_b] >> join`), build two parallel tasks where
+> **one raises an error**, both feeding a `summary` task. Leave `summary` on the
+> default rule and watch it get skipped; then pick the trigger rule that makes
+> `summary` run because at least one parent succeeded. Which fits — `ONE_SUCCESS`
+> or `ALL_DONE`? Explain the difference between them.
 
 ---
 
@@ -227,6 +163,12 @@ you want after a branch.
 
 **Whenever a task sits below a branch, set its trigger rule deliberately.** This is
 the #1 branching bug.
+
+> **🎯 Challenge — reuse P1 (BigQuery).** Feed the §1 branch a **real** number: use
+> `BigQueryHook.get_first` (from P1) to count rows in
+> `bigquery-public-data.austin_bikeshare.bikeshare_trips`, and branch on that live
+> count instead of a constant. Add a join after the two paths and give it the right
+> trigger rule so the skipped branch doesn't skip it. This is your bridge into §6.
 
 ---
 

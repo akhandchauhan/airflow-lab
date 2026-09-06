@@ -85,16 +85,18 @@ API surface. Skip beginner buildup; go deep on *why*.
   BigQuery table (`bigquery-public-data.*` or the user's own dataset) via
   `google_cloud_default`, with every query cost-capped. Keep the *theory* simple
   (plain English + one running analogy); make the *practice* real BigQuery.
-- **Every code example is a COMPLETE, runnable DAG — never a bare fragment.** Each
-  code block must include imports, the `@dag` definition, the tasks, the wiring, and
-  the trailing `pipeline()` call, with a `# dags/task-N/<file>.py` header comment and
-  a `airflow dags test <dag_id> <date>` run line. The user must be able to copy any
-  block, save it, and run it. No snippets that reference undefined names.
-- **Per-section concept demos may be minimal & self-contained** (no provider) to
-  isolate ONE mechanic and run in seconds — this is allowed even from Session 04 on.
-  Only the **complete reference** (the combined "§ Complete runnable reference" DAG)
-  and the **build spec** must be BigQuery. So a topic can have tiny no-BigQuery
-  runnable demos per concept, then one full BigQuery reference that combines them.
+- **Concept snippets highlight ONE mechanic — but stay coherent.** A per-section
+  code block shows just the mechanic and drops the `@dag`/`pipeline()`/imports
+  boilerplate that would bury it. Mark the key line (e.g. `# ← THE MECHANIC`). BUT
+  every function/name the snippet references MUST be defined in that same snippet —
+  no calls to undefined tasks. Keep the necessary `@task` defs, cut only the wrapper.
+- **Exactly ONE complete, runnable DAG per topic:** the "§ Complete runnable
+  reference" (BigQuery, from Session 04 on). That is the only block with the full
+  `@dag` + `pipeline()` + run line. Concept snippets are not full DAGs.
+- **After each concept sub-section, add a `🎯 Challenge`** — a short problem
+  statement (not a solution) that reuses a concept from a PREVIOUS session (spiral
+  practice). Name which prior session/concept it pulls in (e.g. "reuse Session 03
+  TaskGroups"). Keep it to a few sentences.
 
 ## Airflow conventions in this repo
 
