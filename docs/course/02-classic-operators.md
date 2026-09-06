@@ -1,4 +1,4 @@
-# Session 02 - W1 Sun - Classic Operators & Dependency Helpers
+# 02 · Classic Operators & Dependency Helpers
 
 **Goal:** build a DAG the *classic* way - instantiate operator objects and wire
 them explicitly - and understand what an Operator actually is, how `>>` builds

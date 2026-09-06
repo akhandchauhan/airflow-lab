@@ -1,4 +1,4 @@
-# Session 04 · W2 Sun — Dynamic Task Mapping
+# 06 · Dynamic Task Mapping
 
 **One line:** dynamic task mapping is a **`for` loop that Airflow runs for you at
 run time**, where each pass of the loop becomes its own separate task.

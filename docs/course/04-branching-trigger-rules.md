@@ -1,4 +1,4 @@
-# Session 04 · Branching & Trigger Rules
+# 04 · Branching & Trigger Rules
 
 **One line:** this is how a DAG makes **decisions** — take one path or another,
 stop early when a check fails, and control **when** a task is allowed to run based

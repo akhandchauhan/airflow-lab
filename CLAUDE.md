@@ -1,8 +1,26 @@
-# airflow-lab — authoring rules for the Airflow 3 weekend course
+# airflow-lab — authoring rules for the Airflow 3 daily-bytes course
 
 This repo is a learning course. Notes live in `docs/course/`; the DAGs the user
 builds live in `dags/`. These rules govern how course **notes** (`.md`) and their
 **reference DAGs** are written. They override default behavior.
+
+## Cadence — daily bytes (not weekends)
+
+- **~20 minutes a day, every day.** No Saturday/Sunday framing anywhere — the old
+  "weekend / 1 hour Sat + Sun" plan is scrapped. Never write "W1 Sat", "weekend",
+  etc. in a title or note.
+- **Break every topic into small "bytes"** — each one finishable in ~20 min: read
+  one short section, run a tiny example, or build one small thing. A topic note has
+  numbered sections; a byte = one section (or the build). Don't hand the user a
+  90-minute wall in one sitting.
+- **Point system lives ONLY in `docs/course/README.md`** — the scoreboard (total
+  points, current/longest streak, last active) and the byte checklist. A *learn*
+  byte = 10 pts, a *build-a-DAG* byte = 20 pts. When the user reports finishing a
+  byte, update the README scoreboard and tick the box.
+- **Do NOT repeat plan/cadence/ritual/points boilerplate inside topic notes.** That
+  meta lives in README only. A topic note contains just the teaching content and its
+  own build spec — no "here's how the course works", no streak talk, no ritual
+  description. Keep notes lean.
 
 ## Audience
 
@@ -50,16 +68,17 @@ API surface. Skip beginner buildup; go deep on *why*.
    `task_id` string, never the function name. `.override`/`.expand`/`.partial` are
    called on the Python **variable**; the id is the **string** passed in.
 
-## Session ritual
+## Topic note structure
 
-- **Concept sessions:** concept → API + example → **complete runnable reference**
-  → **build spec (problem statement)** → **production tip** → verify & push.
-- **Practical sessions (🔷 P1, P2, …):** every 3 concept sessions, one practical
-  applying all three on a real **BigQuery public dataset** (`bigquery-public-data.*`).
-  Ritual: real dataset → setup → complete reference → build spec → run against
-  BigQuery → **production tip** → verify (rows + bytes billed) → push.
-- **Every session ends with ONE production tip** — concept *and* practical. (A
-  practical once shipped without one; that was a miss.)
+- A **topic note** covers one topic, split into short numbered sections so each maps
+  to a ~20-min byte. Shape: concept → API + tiny example → **complete runnable
+  reference** → **build spec (problem statement)** → **production tip**. The
+  README's byte list points at these sections.
+- **Practicals (🔷 P1, P2, …):** every 3 topics, one practical applying them on a
+  real **BigQuery public dataset** (`bigquery-public-data.*`): real dataset → setup
+  → complete reference → build spec → run against BigQuery → **production tip** →
+  verify (rows + bytes billed).
+- **Every topic ends with ONE production tip.** (One once shipped without; a miss.)
 - **From Session 04 onward, exercises use BigQuery, not generic fake-data DAGs.**
   The user has GCP creds and wants production-shaped, hands-on work in every
   session. The complete reference DAG AND the build spec must run against a real

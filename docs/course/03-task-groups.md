@@ -1,4 +1,4 @@
-# Session 03 - W2 Sat - TaskGroups
+# 03 · TaskGroups
 
 **Goal:** organize a DAG's tasks into named, collapsible groups - understand that
 a TaskGroup is a *visual/logical* wrapper (not a sub-DAG), how `group_id`

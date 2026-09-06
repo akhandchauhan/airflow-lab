@@ -1,4 +1,4 @@
-# Session 01 - W1 Sat - TaskFlow Foundations
+# 01 · TaskFlow Foundations
 
 **Goal:** author a DAG entirely with `@dag` / `@task`, understand the machinery
 underneath (parse-time vs run-time, what an `XComArg` really is), and use
