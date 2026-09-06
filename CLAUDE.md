@@ -4,7 +4,7 @@ This repo is a learning course. Notes live in `docs/course/`; the DAGs the user
 builds live in `dags/`. These rules govern how course **notes** (`.md`) and their
 **reference DAGs** are written. They override default behavior.
 
-## Cadence — daily bytes (not weekends)
+## Cadence — daily bytes
 
 - **~20 minutes a day, every day.** No Saturday/Sunday framing anywhere — the old
   "weekend / 1 hour Sat + Sun" plan is scrapped. Never write "W1 Sat", "weekend",
