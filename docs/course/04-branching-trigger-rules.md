@@ -21,7 +21,7 @@
 One project spine: `bigquery-public-data.stackoverflow`. These are the columns this
 session (and the ones after) lean on — join keys in **bold**.
 
-**`posts_questions`** — one row per question
+**`posts_questions`** · **grain: one row = one question**
 
 | column                | type      | meaning                                             |
 | --------------------- | --------- | --------------------------------------------------- |
@@ -35,7 +35,7 @@ session (and the ones after) lean on — join keys in **bold**.
 | `owner_user_id`       | INT64     | FK → `users.id`                                     |
 | `title`               | STRING    | question title                                      |
 
-**`posts_answers`** — one row per answer (no `tags` / `title`)
+**`posts_answers`** · **grain: one row = one answer** (no `tags` / `title`)
 
 | column          | type      | meaning                          |
 | --------------- | --------- | -------------------------------- |
@@ -45,14 +45,14 @@ session (and the ones after) lean on — join keys in **bold**.
 | `score`         | INT64     | net votes                        |
 | `owner_user_id` | INT64     | FK → `users.id`                  |
 
-**`tags`** — one row per tag (tiny dimension table, ~60k rows)
+**`tags`** · **grain: one row = one tag** (tiny dimension table, ~60k rows)
 
 | column     | type  | meaning                                       |
 | ---------- | ----- | --------------------------------------------- |
 | `tag_name` | STRING | e.g. `python` (one tag per row — no pipes)   |
 | `count`    | INT64 | how many questions carry this tag             |
 
-**`users`** — one row per user
+**`users`** · **grain: one row = one user**
 
 | column          | type      | meaning     |
 | --------------- | --------- | ----------- |
