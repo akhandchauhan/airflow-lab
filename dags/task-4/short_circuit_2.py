@@ -20,7 +20,7 @@ def pipeline():
     def check_unanswered_cnt(cnt: int):
         return True if cnt > 0 else False
 
-    @task()
+    @task
     def build_report():
         print("building the product-health report")
 
