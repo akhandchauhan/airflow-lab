@@ -8,10 +8,10 @@ take the points, keep the streak alive.
 
 | | |
 |---|---|
-| **Total points** | 180 |
-| **Current streak** | 1 day |
+| **Total points** | 190 |
+| **Current streak** | 1 day (missed 09-07) |
 | **Longest streak** | 3 days |
-| **Last active** | 2026-09-06 |
+| **Last active** | 2026-09-08 |
 
 **Points:** a *learn* byte = **10**, a *build-a-DAG* byte = **20** (counts only when
 its commit is CI-green). **Streak** = consecutive days with at least one byte done.
@@ -39,7 +39,7 @@ Reference pages (read anytime): [xcom-basics](xcom-basics.md) · [gcp-project](g
 ### 🎯 Mission 04 · Give the Pipeline a Brain — branching & trigger rules → [note](04-branching-trigger-rules.md)
 *Story: the Product Health report ran on an empty table and told the VP "0 unanswered questions". Give the pipeline a brain.*
 - [x] **4.1** `@task.branch` — read §1, run the branch snippet · *10* ✅ (+ §1 XCom challenge)
-- [ ] **4.2** `@task.short_circuit` — read §2, the guard that stops empty runs · *10*
+- [x] **4.2** `@task.short_circuit` — read §2, the guard that stops empty runs · *10* ✅ (fix `owner` casing)
 - [ ] **4.3** `TriggerRule` + the 2am trap — read §3–§4 · *10*
 - [ ] **4.4** Build `m04_product_health` on Stack Overflow — §6 mission build, CI-green · *20*
 
