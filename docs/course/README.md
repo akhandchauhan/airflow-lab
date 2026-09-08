@@ -43,17 +43,24 @@ Reference pages (read anytime): [xcom-basics](xcom-basics.md) · [gcp-project](g
 - [ ] **4.3** `TriggerRule` + the 2am trap — read §3–§4 · *10*
 - [ ] **4.4** Build `s4_product_health` on Stack Overflow — §6 build, CI-green · *20*
 
-### 05 · Params + Jinja + context → note (to be written)
-- [ ] **5.1** `Param` — declare params, trigger a DAG with config · *10*
-- [ ] **5.2** Jinja templates — `{{ ds }}`, `{{ params.x }}`, `template_fields` · *10*
-- [ ] **5.3** `get_current_context` — read run info inside a task · *10*
-- [ ] **5.4** Build a parametrized BigQuery DAG · *20*
+### 🎯 Session 05 · The Universal Adapter — hooks in depth → [note](05-hooks.md)
+*Story: a hardcoded DB password broke on rotation and leaked into git. Learn the abstraction that keeps every secret out of your code.*
+- [ ] **5.1** What a hook is — read §1, run the one-liner hook snippet · *10*
+- [ ] **5.2** `get_connection` + the Connection object — read §2 · *10*
+- [ ] **5.3** Resolution order (backend → env → DB) + custom hooks — read §3–§4 · *10*
+- [ ] **5.4** Build `s5_answer_rate` via hooks, no secret in the file — §6 build · *20*
 
-### 06 · Dynamic task mapping (deferred from 04) → [note](06-dynamic-task-mapping.md)
-- [ ] **6.1** `.expand` + `.partial` — read §1–§2, run the mapped example · *10*
-- [ ] **6.2** Reduce — read §7, add the collector task · *10*
-- [ ] **6.3** `.expand_kwargs` / `.zip` / `.map` — read §4–§6 · *10*
-- [ ] **6.4** Build a mapped BigQuery DAG · *20*
+### 06 · Params + Jinja + context → note (to be written)
+- [ ] **6.1** `Param` — declare params, trigger a DAG with config · *10*
+- [ ] **6.2** Jinja templates — `{{ ds }}`, `{{ params.x }}`, `template_fields` · *10*
+- [ ] **6.3** `get_current_context` — read run info inside a task · *10*
+- [ ] **6.4** Build a parametrized BigQuery DAG · *20*
+
+### 07 · Dynamic task mapping (deferred from 04) → [note](07-dynamic-task-mapping.md)
+- [ ] **7.1** `.expand` + `.partial` — read §1–§2, run the mapped example · *10*
+- [ ] **7.2** Reduce — read §7, add the collector task · *10*
+- [ ] **7.3** `.expand_kwargs` / `.zip` / `.map` — read §4–§6 · *10*
+- [ ] **7.4** Build a mapped BigQuery DAG · *20*
 
 ### 🔷 P2 · Parametrized dynamic load → practical (to be written)
 - [ ] Applies 04–06 on `google_analytics_sample.ga_sessions_*`: param date range,
@@ -68,8 +75,9 @@ Reference pages (read anytime): [xcom-basics](xcom-basics.md) · [gcp-project](g
 12 Event-driven · 🔷 P4 Asset-driven BQ pipeline
 
 **Phase C — Data passing, connections, sensors:** 13 XCom deep · 14 XCom backend +
-ObjectStorage · 15 Connections + Hooks · 🔷 P5 BQ→GCS · 16 Variables + Secrets ·
-17 Sensors · 18 Deferrable + Triggerer · 🔷 P6 Secrets + deferrable sensor
+ObjectStorage · 🔷 P5 BQ→GCS · 16 Variables + Secrets · 17 Sensors ·
+18 Deferrable + Triggerer · 🔷 P6 Secrets + deferrable sensor
+*(Connections + Hooks pulled forward to Session 05.)*
 
 **Phase D — Isolation, containers, cross-DAG:** 19 Dependency isolation · 20 Container
 tasks · 21 Cross-DAG · 🔷 P7 Isolated transform + cross-DAG · 22 Setup/teardown
