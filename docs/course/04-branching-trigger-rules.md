@@ -14,6 +14,59 @@
 > a **light summary**. And no matter what happens, **always post a status** so you're
 > never guessing whether it ran.
 
+---
+
+## 📊 The tables you're working with
+
+One project spine: `bigquery-public-data.stackoverflow`. These are the columns this
+session (and the ones after) lean on — join keys in **bold**.
+
+**`posts_questions`** — one row per question
+
+| column                | type      | meaning                                             |
+| --------------------- | --------- | --------------------------------------------------- |
+| **`id`**              | INT64     | question id (answers point here via `parent_id`)    |
+| `creation_date`       | TIMESTAMP | when it was asked                                   |
+| `answer_count`        | INT64     | number of answers — **`0` = unanswered**            |
+| `accepted_answer_id`  | INT64     | null if nothing was accepted                        |
+| `score`               | INT64     | net votes                                           |
+| `view_count`          | INT64     | views                                               |
+| `tags`                | STRING    | **pipe-delimited**, e.g. `"python\|pandas\|bigquery"` |
+| `owner_user_id`       | INT64     | FK → `users.id`                                     |
+| `title`               | STRING    | question title                                      |
+
+**`posts_answers`** — one row per answer (no `tags` / `title`)
+
+| column          | type      | meaning                          |
+| --------------- | --------- | -------------------------------- |
+| **`id`**        | INT64     | answer id                        |
+| **`parent_id`** | INT64     | FK → `posts_questions.id`        |
+| `creation_date` | TIMESTAMP | when it was posted               |
+| `score`         | INT64     | net votes                        |
+| `owner_user_id` | INT64     | FK → `users.id`                  |
+
+**`tags`** — one row per tag (tiny dimension table, ~60k rows)
+
+| column     | type  | meaning                                       |
+| ---------- | ----- | --------------------------------------------- |
+| `tag_name` | STRING | e.g. `python` (one tag per row — no pipes)   |
+| `count`    | INT64 | how many questions carry this tag             |
+
+**`users`** — one row per user
+
+| column          | type      | meaning     |
+| --------------- | --------- | ----------- |
+| **`id`**        | INT64     | user id     |
+| `display_name`  | STRING    | name        |
+| `reputation`    | INT64     | rep score   |
+| `creation_date` | TIMESTAMP | signup date |
+
+> `tags` on `posts_questions` is pipe-delimited — explode it with
+> `UNNEST(SPLIT(tags, '|'))`. Cost note: `COUNT(*)` scans **0 bytes**; filtering or
+> counting one column scans only **that** column, never the whole row.
+
+---
+
 Three tools do exactly that:
 
 | Tool                  | The decision it makes            | Road-trip picture                          |
@@ -245,41 +298,82 @@ the whole run short-circuit while `notify` *still* fires.
 
 ---
 
-## 6. Your build (no solution)
+## 6. Assignment — "The Python Backlog Brain" (no solution)
 
 **File:** `dags/s4/product_health.py` · **dag_id:** `s4_product_health`
 
-Ship the real Product Health brain. It reads a live metric from
-`bigquery-public-data.stackoverflow`, guards against an empty run, branches on the
-metric, and always posts a status.
+### The scenario
 
-**The job:**
+The VP just narrowed the ask: *"Stop giving me the whole site. I only care about
+the **`python` tag** — how big is its unanswered backlog, and when it's bad, which
+sub-topics are drowning?"* Build the brain that answers exactly that, every
+morning, and never lies when the data is late.
 
-- A first task reads a **real metric** from Stack Overflow (unanswered backlog, new
-  questions in a period, a tag's volume — your call).
-- A **guard** (`@task.short_circuit`) stops the whole run if the metric is 0.
-- A **branch** (`@task.branch`) picks one of two BigQuery query paths based on the
-  metric (a heavy breakdown vs a light summary); the other path is skipped.
-- A **join** task publishes the result and must survive the skipped branch.
-- A **status** task runs **no matter what** (success, failure, or short-circuit).
+### The pipeline (5 tasks, this exact shape)
 
-**Rules of engagement:**
+```
+measure_backlog ─(guard: 0? STOP)─▶ triage ─┬─▶ deep_breakdown ──┐
+                                             └─▶ light_summary ───┴─▶ publish ─▶ notify
+```
 
-- BigQuery work via the Google provider + `google_cloud_default`; **every query
-  cost-capped** (`maximumBytesBilled`), no `SELECT *`.
-- Correct `TriggerRule` on the join and the status task.
-- Names clearly distinct (R12): a `@task.branch` returns the **noun `task_id`**, the
-  functions are verbs (`run_deep_triage`).
-- Passes the integrity gates: `tags`, real `owner`, `retries >= 1`.
+| # | task_id            | type                  | what it must do                                                                                          |
+| - | ------------------ | --------------------- | -------------------------------------------------------------------------------------------------------- |
+| 1 | `measure_backlog`  | `@task` + BigQueryHook | `COUNT(*)` of `posts_questions` where `answer_count = 0` **and** `tags LIKE '%\|python\|%'`; return the int |
+| 2 | `has_backlog`      | `@task.short_circuit` | stop the whole run if the count is `0`                                                                    |
+| 3 | `triage`           | `@task.branch`        | `> 50_000` → `"deep_breakdown"`, else `"light_summary"` (return the **task_id string**)                  |
+| 4a | `deep_breakdown`  | `BigQueryInsertJobOperator` | top-10 **co-tags** of unanswered python questions (`UNNEST(SPLIT(tags,'\|'))`, exclude `python` itself) |
+| 4b | `light_summary`   | `BigQueryInsertJobOperator` | single-row headline: the unanswered count                                                          |
+| 5a | `publish`         | `@task`               | logs the result — **must survive the skipped branch path**                                               |
+| 5b | `notify`          | `@task`               | logs "run finished" — **runs on success, failure, OR short-circuit**                                     |
 
-**Done when:**
+### Rules of engagement
 
-- `python dags/s4/product_health.py` parses (prints nothing).
-- `airflow dags test s4_product_health 2026-01-01` runs green.
-- Graph: one path runs, the other skipped, the join runs, status runs.
-- Flip the guard and the branch threshold and watch the outcome change.
-- **BigQuery Job history** shows every query within the cap.
-- `python -m pytest tests/ -v` stays green.
+- All BigQuery via the Google provider + `google_cloud_default`. **Every operator
+  query cost-capped** with `maximumBytesBilled` (use `"2000000000"` = 2 GB); no
+  `SELECT *`. The `@task` count read may use `BigQueryHook.get_first` (aggregate,
+  uncapped is fine).
+- **Pick the two trigger rules yourself** — one for `publish` (join below a
+  branch), one for `notify` (always-run). Getting these right is the whole point of
+  §3–§4.
+- Names clearly distinct (R12): `task_id` = noun; the branch returns the **noun
+  task_id string**, never a function name; functions are verbs (`run_deep_breakdown`).
+- Passes the integrity gates: non-empty `tags`, real `owner`, `retries >= 1`.
+
+### Acceptance criteria (this is the grade)
+
+| Check | Points |
+| ----- | ------ |
+| `python dags/s4/product_health.py` parses; `python -m pytest tests/ -v` green | 4 |
+| `airflow dags test s4_product_health 2026-01-01` runs green end-to-end | 4 |
+| Graph proves it: one branch path runs, the other is **skipped (grey)**, `publish` **still runs** | 5 |
+| `notify` runs even when you force `measure_backlog` to return `0` (short-circuit) — prove it | 4 |
+| **BigQuery Job history** shows every operator query **within the 2 GB cap** | 3 |
+
+**20 / 20** = the build byte. Tick **4.4** on the scoreboard.
+
+### Prove it works (do all three)
+
+1. Real run: python's unanswered backlog is well over 50k → `deep_breakdown` runs,
+   `light_summary` goes grey, `publish` + `notify` run.
+2. Flip the branch: temporarily hardcode `measure_backlog` to return `100` (below
+   the 50k threshold) → `light_summary` runs and `deep_breakdown` goes grey.
+3. Short-circuit: hardcode `measure_backlog` to return `0` → everything skips
+   **except `notify`**, which still fires.
+
+### Stretch (optional, no extra points — just sharper)
+
+- Make the focus tag a module constant `FOCUS_TAG = "python"` so the DAG retargets
+  in one line.
+- Add a third branch path `escalate` for a `> 200_000` "on fire" backlog.
+
+### Nudges (only if stuck)
+
+- The `LIKE '%|python|%'` trick works because `tags` is stored pipe-delimited *and*
+  the provider wraps the whole string in pipes — but safest is to `UNNEST` and match
+  `tag = 'python'`.
+- `publish` has one skipped parent every run — that's the §4 trap; its trigger rule
+  is `NONE_FAILED_MIN_ONE_SUCCESS`, not the default.
+- `notify` needs `ALL_DONE`.
 
 ---
 
