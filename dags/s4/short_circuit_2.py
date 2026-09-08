@@ -1,6 +1,6 @@
 from __future__ import annotations
 import pendulum
-from airflow.sdk import dag, task
+from airflow.sdk import dag, task, TriggerRule
 
 
 @dag(
@@ -16,16 +16,22 @@ def pipeline():
     def cnt_unanswered_q() -> int:
         return 200_000
 
-    @task.short_circuit
+    # skips only the direct children, letting further-down tasks (like an ALL_DONE notify) honor their own trigger rule and still run
+    @task.short_circuit(ignore_downstream_trigger_rules=False)
     def check_unanswered_cnt(cnt: int):
-        return True if cnt > 0 else False
+        return cnt < 0
 
     @task
     def build_report():
         print("building the product-health report")
 
+    # run once everyone upstream is finished, no matter how they finished
+    @task(trigger_rule=TriggerRule.ALL_DONE)
+    def notify():
+        print("Notify the user_about the problem")
+
     task1 = check_unanswered_cnt(cnt_unanswered_q())
-    task1 >> build_report()
+    task1 >> build_report() >> notify()
 
 
 pipeline()
