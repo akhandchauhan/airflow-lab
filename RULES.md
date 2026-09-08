@@ -17,7 +17,7 @@ Hard rules for writing course notes (`docs/course/*.md`) and their reference DAG
 ## Code examples
 - **R8** — **Concept snippets highlight ONE mechanic.** Drop the `@dag`/`pipeline()`/imports wrapper; mark the key line (`# ← THE MECHANIC`). BUT every name the snippet references **must be defined in that snippet** — no calls to undefined tasks.
 - **R9** — **Exactly ONE complete runnable DAG per topic**: the "Complete runnable reference" (full `@dag` + `pipeline()` + a `airflow dags test …` run line). From topic 04 on it uses **BigQuery**.
-- **R10** — **After each concept sub-section, add a `🎯 Challenge`** — a short problem statement (not a solution) that reuses a concept from a **previous** session; name which one.
+- **R10** — **After each concept sub-section, add a `🎯 Challenge` that EXTENDS the exact example just shown.** Add functionality to those same tasks that reveals a **new facet of the same concept** (e.g. a branch returning a *list*; short-circuit's `ignore_downstream_trigger_rules`; a new trigger rule), optionally weaving in a prior session. It must be **coherent** with the snippet above — the reader edits that code, not a disconnected new DAG. Problem statement, not solution.
 - **R11** — **Build spec = PROBLEM STATEMENT**, never a solution walkthrough. State what/constraints/acceptance; the user designs the how. Full code lives only in the reference (a different example).
 
 ## Naming
@@ -25,7 +25,8 @@ Hard rules for writing course notes (`docs/course/*.md`) and their reference DAG
 
 ## Airflow / BigQuery
 - **R13** — **Airflow 3 only.** Public API `airflow.sdk`. Default **TaskFlow** unless the topic is classic operators. No Airflow 2 comparisons.
-- **R14** — DAGs live in `dags/<topic>/` subfolders; give correct paths in notes.
+- **R14** — DAGs live in `dags/<t><NN>/` subfolders (see R26); give correct paths in notes. Airflow parses `dags/` recursively.
+- **R26** — **DAG file & id naming — one scheme, no exceptions.** Each session/practical gets a folder `dags/s<N>/` (session) or `dags/p<N>/` (practical) — single number, no zero-pad. Inside it, **the file is named by the topic only, NOT prefixed with the session** (the folder already namespaces it): `dags/s4/product_health.py`. The **`dag_id` carries the prefix** (dag_ids share one flat namespace and must be unique): `dag_id="s4_product_health"`. The **reference/demo** DAG is `<topic>_demo.py` with `dag_id="s<N>_<topic>_demo"`. Examples: Session 04 reference = `dags/s4/product_health_demo.py` (`s4_product_health_demo`); its build = `dags/s4/product_health.py` (`s4_product_health`); Practical 1 build = `dags/p1/bigquery_hello.py` (`p1_bigquery_hello`).
 - **R15** — Every DAG passes the integrity gates (`tests/dags/test_dag_integrity.py`): real `owner`, `retries >= 1`, non-empty `tags`. Keep CI green.
 - **R16** — From topic 04 on, the **reference DAG and build spec use real BigQuery** via `google_cloud_default`.
 - **R17** — **Cost safety:** cap every query with `maximumBytesBilled`; no `SELECT *` on big tables; prefer `COUNT`/aggregates (0 bytes); pin providers; **never** Cloud Composer.
@@ -34,9 +35,9 @@ Hard rules for writing course notes (`docs/course/*.md`) and their reference DAG
 - **R20** — **Orchestrate, don't compute.** `BigQueryInsertJobOperator` XCom = the job id, not rows. Pull only small scalars back (via `@task` + `BigQueryHook.get_first`).
 - **R21** — **One production tip per topic.**
 
-## Engagement — missions & story (why the course exists this way)
-- **R23** — **Every topic is a "Mission" with a cold open.** Title = `Mission NN · <memorable name>` (e.g. "Give the Pipeline a Brain"). Open with a **📟 Cold open**: a 2–4 line on-call scenario with real stakes (something broke / someone's waiting on a number), then a one-line "today's mission." The concept is taught as *the fix for that scenario*, never as abstract API.
-- **R24** — **One project spine: Stack Overflow Product Health.** From Mission 04 on, every reference DAG and build uses `bigquery-public-data.stackoverflow` (`posts_questions`, `posts_answers`, `users`, `tags`, `votes`) and adds a layer to the same growing pipeline. Keep the story continuous mission-to-mission; don't invent a fresh unrelated dataset each time. (`posts_questions.tags` is pipe-delimited; `creation_date`/`answer_count` are the workhorse columns.)
+## Engagement — sessions & story (why the course exists this way)
+- **R23** — **Every topic is a "Session" with a cold open.** Title = `Session NN · <memorable name>` (e.g. "Give the Pipeline a Brain"). Open with a **📟 Cold open**: a 2–4 line on-call scenario with real stakes (something broke / someone's waiting on a number), then a one-line "today's session." The concept is taught as *the fix for that scenario*, never as abstract API.
+- **R24** — **One project spine: Stack Overflow Product Health.** From Session 04 on, every reference DAG and build uses `bigquery-public-data.stackoverflow` (`posts_questions`, `posts_answers`, `users`, `tags`, `votes`) and adds a layer to the same growing pipeline. Keep the story continuous session-to-session; don't invent a fresh unrelated dataset each time. (`posts_questions.tags` is pipe-delimited; `creation_date`/`answer_count` are the workhorse columns.)
 - **R25** — **Production tips are war stories.** Frame the one production tip as "the bug that pages you at 2am," tied back to the cold open — concrete failure + the habit that prevents it. No dry checklist bullets.
 
 ## Format

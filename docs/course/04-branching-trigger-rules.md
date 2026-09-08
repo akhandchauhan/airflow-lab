@@ -1,4 +1,4 @@
-# Mission 04 · Give the Pipeline a Brain
+# Session 04 · Give the Pipeline a Brain
 
 **Branching & trigger rules** — teaching a DAG to make decisions.
 
@@ -9,10 +9,10 @@
 > table**, and it cheerfully told the VP that Stack Overflow had **0 unanswered
 > questions**. Slack lit up. Not great.
 >
-> **Today's mission:** give the pipeline a brain. If there's nothing to report, it
-> should **stop itself**. When the backlog is huge, it should do a **deep tag
-> breakdown**; when it's small, a **light summary**. And no matter what happens, it
-> must **always post a status** so you're never guessing whether it ran.
+> **Today's job:** give the pipeline a brain. If there's nothing to report, it should
+> **stop itself**. When the backlog is huge, do a **deep tag breakdown**; when small,
+> a **light summary**. And no matter what happens, **always post a status** so you're
+> never guessing whether it ran.
 
 Three tools do exactly that:
 
@@ -40,7 +40,7 @@ every other task wired directly below it is **skipped**.
 ```python
 @task
 def count_unanswered() -> int:
-    return 6_000_000                # a stub for now; the real BigQuery count arrives in §6
+    return 6_000_000                # a stub for now; the real BigQuery count arrives in §5
 
 @task.branch                        # ← THE MECHANIC
 def triage_by_size(backlog: int) -> str:
@@ -59,13 +59,14 @@ path >> [run_deep_triage(), run_light_triage()]   # the returned task_id runs; t
 ```
 
 - The branch returns a **`task_id` string**, not the function object.
-- Return a **list** of task_ids to run several paths at once.
 - The branch and its options must be **directly wired** (`path >> [a, b]`).
 
-> **🎯 Challenge — reuse Mission 01 (XCom hand-off).** Right now `count_unanswered`
-> returns a stub. That's already the return→argument hand-off from Mission 01 —
-> prove you get it: add a second upstream task that returns a *threshold*, and make
-> `triage_by_size` take **both** the backlog and the threshold as arguments.
+> **🎯 Challenge — a branch can start *several* paths.** Extend the example above:
+> add a third task `run_sample_tags` (task_id `sample_tags`), and change
+> `triage_by_size` so that for a **medium** backlog (say 1M–5M) it returns a **list**
+> `["light_triage", "sample_tags"]` — running *both*. Wire the new task under `path`
+> and confirm two paths run at once. *(New facet: `@task.branch` may return a list of
+> task_ids, not just one.)*
 
 ---
 
@@ -86,14 +87,16 @@ def build_report():
 has_backlog(count_unanswered()) >> build_report()
 ```
 
-Use it as a **guard in front of expensive work**: "only run if there's actually
-something to report." Branch vs short-circuit: **branch chooses between paths;
-short-circuit decides whether to continue at all.**
+Use it as a **guard in front of expensive work**. Branch vs short-circuit: **branch
+chooses between paths; short-circuit decides whether to continue at all.**
 
-> **🎯 Challenge — reuse Mission 03 (TaskGroups).** Put `build_report` and a
-> follow-up `write_summary` inside a `@task_group`, and wire the guard **before** the
-> group. Confirm that when `has_backlog` returns False, the **whole group** goes
-> skipped in one shot — not task by task.
+> **🎯 Challenge — let a status task survive the skip.** Extend the example: add a
+> `notify` task after `build_report` that must run **even when the guard stops the
+> run**. By default short-circuit skips *all* downstream — so set
+> `@task.short_circuit(ignore_downstream_trigger_rules=False)` and give `notify`
+> `trigger_rule=TriggerRule.ALL_DONE`. Confirm: when `has_backlog` is False,
+> `build_report` skips but `notify` still fires. *(New facet:
+> `ignore_downstream_trigger_rules`.)*
 
 ---
 
@@ -131,11 +134,12 @@ The trigger rules you'll actually use:
 | `ONE_SUCCESS`                 | any one upstream succeeded                         | fan-in where any success is enough        |
 | `ALL_FAILED`                  | every upstream failed                              | run only on total failure                 |
 
-> **🎯 Challenge — reuse Mission 02 (parallel wiring).** Using the parallel style
-> from Mission 02 (`[check_a, check_b] >> gate`), build two parallel data-quality
-> checks where **one fails on purpose**, both feeding a `gate` task. Which trigger
-> rule lets `gate` run because at least one check passed — `ONE_SUCCESS` or
-> `ALL_DONE`? Explain the difference.
+> **🎯 Challenge — page on-call only when it breaks.** Extend the example: add a
+> `page_oncall` task that fires **only if `build_report` failed**, while `notify`
+> still runs always. Pick the trigger rule that means "run when the upstream failed"
+> and wire both below `build_report`. Make `build_report` `raise` once to see
+> `page_oncall` fire and `notify` fire, but not on a clean run. *(New facet:
+> `ALL_FAILED` / failure-triggered tasks.)*
 
 ---
 
@@ -156,10 +160,12 @@ triage_by_size ──▶ deep_triage ────┐
 task sits below a branch, set its trigger rule **on purpose**. This is the #1
 branching bug in production.
 
-> **🎯 Challenge — reuse P1 (BigQuery).** Swap the stub `count_unanswered` for a
-> **real** count: `BigQueryHook.get_first("SELECT COUNT(*) FROM
-> \`bigquery-public-data.stackoverflow.posts_questions\` WHERE answer_count = 0")`.
-> Now the whole brain runs on live Stack Overflow data. This is your on-ramp to §6.
+> **🎯 Challenge — make it real.** Extend the fix into the actual pipeline: swap the
+> stub `count_unanswered` for a live count with `BigQueryHook.get_first` on
+> `bigquery-public-data.stackoverflow.posts_questions` (`WHERE answer_count = 0`),
+> keep the `NONE_FAILED_MIN_ONE_SUCCESS` join, and confirm `publish` still runs after
+> the skipped path. You've now assembled the §5 reference yourself. *(Bridges P1's
+> `BigQueryHook`.)*
 
 ---
 
@@ -169,6 +175,7 @@ The whole brain, wired on the real `posts_questions` table via the P1 connection
 Every query is cost-capped.
 
 ```python
+# dags/s4/product_health_demo.py
 from __future__ import annotations
 
 import pendulum
@@ -182,11 +189,11 @@ BIG_BACKLOG = 5_000_000     # above this many unanswered -> the deep path
 
 
 @dag(
-    dag_id="m04_product_health_demo",
+    dag_id="s4_product_health_demo",
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
     schedule=None,
     catchup=False,
-    tags=["mission-04", "branching", "stackoverflow"],
+    tags=["session-4", "branching", "stackoverflow"],
     default_args={"owner": "akhand", "retries": 1},
 )
 def pipeline():
@@ -254,8 +261,8 @@ pipeline()
 Run it (needs the P1 BigQuery connection):
 
 ```bash
-python dags/task-4/m04_product_health_demo.py
-airflow dags test m04_product_health_demo 2026-01-01
+python dags/s4/product_health_demo.py
+airflow dags test s4_product_health_demo 2026-01-01
 ```
 
 Stack Overflow's unanswered backlog is in the millions (> `BIG_BACKLOG`), so
@@ -267,15 +274,15 @@ the whole run short-circuit while `notify` *still* fires.
 
 ---
 
-## 6. Your mission build (no solution)
+## 6. Your build (no solution)
 
-**File:** `dags/task-4/m04_product_health.py` · **dag_id:** `m04_product_health`
+**File:** `dags/s4/product_health.py` · **dag_id:** `s4_product_health`
 
 Ship the real Product Health brain. It reads a live metric from
 `bigquery-public-data.stackoverflow`, guards against an empty run, branches on the
 metric, and always posts a status.
 
-**The mission:**
+**The job:**
 
 - A first task reads a **real metric** from Stack Overflow (unanswered backlog, new
   questions in a period, a tag's volume — your call).
@@ -294,10 +301,10 @@ metric, and always posts a status.
   functions are verbs (`run_deep_triage`).
 - Passes the integrity gates: `tags`, real `owner`, `retries >= 1`.
 
-**Mission complete when:**
+**Done when:**
 
-- `python dags/task-4/m04_product_health.py` parses (prints nothing).
-- `airflow dags test m04_product_health 2026-01-01` runs green.
+- `python dags/s4/product_health.py` parses (prints nothing).
+- `airflow dags test s4_product_health 2026-01-01` runs green.
 - Graph: one path runs, the other skipped, the join runs, status runs.
 - Flip the guard and the branch threshold and watch the outcome change.
 - **BigQuery Job history** shows every query within the cap.
@@ -309,9 +316,8 @@ metric, and always posts a status.
 
 - **A short-circuit guard in front of every expensive stage is the cheapest
   insurance you'll ever write.** The Tuesday incident — reporting on an empty table —
-  is a `has_backlog`-style guard away from never happening. "Is there new data? Is
-  this the right day? Does the partition exist?" One cheap check saves a wrong number
-  in front of a VP *and* a wasted warehouse bill.
+  is a `has_backlog`-style guard away from never happening. One cheap check saves a
+  wrong number in front of a VP *and* a wasted warehouse bill.
 - **A post-branch task on the default trigger rule is a silent time bomb.** It skips
   because one branch skipped, the DAG goes green, and the important step quietly never
   ran — you find out days later when someone asks where the report went. Set
@@ -323,14 +329,14 @@ metric, and always posts a status.
 ## 8. Verify + commit
 
 ```bash
-python dags/task-4/m04_product_health.py
-airflow dags test m04_product_health 2026-01-01
+python dags/s4/product_health.py
+airflow dags test s4_product_health 2026-01-01
 python -m pytest tests/ -v
-git add -A && git commit -m "mission 04: product-health brain (branching + trigger rules)" && git push
+git add -A && git commit -m "session 04: product-health brain (branching + trigger rules)" && git push
 ```
 
-Mission complete when the graph shows one path taken, one skipped, the join running,
-and status always running. Then update the scoreboard in `README.md`.
+Done when the graph shows one path taken, one skipped, the join running, and status
+always running. Then update the scoreboard in `README.md`.
 
 Sources:
 [Branching — Astronomer](https://www.astronomer.io/docs/learn/airflow-branch-operator),

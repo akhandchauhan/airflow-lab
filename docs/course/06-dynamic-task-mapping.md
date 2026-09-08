@@ -1,4 +1,4 @@
-# 06 · Dynamic Task Mapping
+# Session 06 · Dynamic Task Mapping
 
 **One line:** dynamic task mapping is a **`for` loop that Airflow runs for you at
 run time**, where each pass of the loop becomes its own separate task.
@@ -317,11 +317,11 @@ from airflow.sdk import dag, task
 
 
 @dag(
-    dag_id="s04_dynamic_mapping_demo",
+    dag_id="s6_dynamic_mapping_demo",
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
     schedule=None,
     catchup=False,
-    tags=["session-04", "dynamic-mapping"],
+    tags=["session-6", "dynamic-mapping"],
     default_args={"owner": "akhand", "retries": 1},
 )
 def pipeline():
@@ -355,8 +355,8 @@ pipeline()
 Run it:
 
 ```bash
-python dags/task-4/s04_dynamic_mapping_demo.py
-airflow dags test s04_dynamic_mapping_demo 2026-01-01
+python dags/s6/dynamic_mapping_demo.py
+airflow dags test s6_dynamic_mapping_demo 2026-01-01
 ```
 
 In the UI, `row_count` shows as `row_count[0]`, `row_count[1]`, `row_count[2]`, and
@@ -366,7 +366,7 @@ In the UI, `row_count` shows as `row_count[0]`, `row_count[1]`, `row_count[2]`, 
 
 ## 10. Build spec — your challenge (no solution)
 
-**File:** `dags/task-4/04_dynamic_mapping.py`  ·  **dag_id:** `s04_dynamic_mapping`
+**File:** `dags/s6/dynamic_mapping.py`  ·  **dag_id:** `s6_dynamic_mapping`
 
 Build a DAG that spreads work over a list whose length is known only during the
 run, then adds up the results. The number of parallel copies must come from the
@@ -394,8 +394,8 @@ run, not be hard-coded. (Your own "pizza shop".)
 
 **Acceptance criteria:**
 
-- `python dags/task-4/04_dynamic_mapping.py` parses (prints nothing).
-- `airflow dags test s04_dynamic_mapping 2026-01-01` runs green.
+- `python dags/s6/dynamic_mapping.py` parses (prints nothing).
+- `airflow dags test s6_dynamic_mapping 2026-01-01` runs green.
 - The UI shows the mapped task as numbered copies `name[0]`, `name[1]`, … and the
   number of copies equals the length of the first task's list.
 - The third task runs **once** and receives the list of all the copies' results.
@@ -432,8 +432,8 @@ it safe:
 ## 12. Verify + commit
 
 ```bash
-python dags/task-4/04_dynamic_mapping.py
-airflow dags test s04_dynamic_mapping 2026-01-01
+python dags/s6/dynamic_mapping.py
+airflow dags test s6_dynamic_mapping 2026-01-01
 python -m pytest tests/ -v
 git add -A && git commit -m "session 04: dynamic task mapping" && git push
 ```

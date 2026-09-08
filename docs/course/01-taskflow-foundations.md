@@ -1,4 +1,4 @@
-# 01 · TaskFlow Foundations
+# Session 01 · TaskFlow Foundations
 
 **Goal:** author a DAG entirely with `@dag` / `@task`, understand the machinery
 underneath (parse-time vs run-time, what an `XComArg` really is), and use
@@ -254,7 +254,7 @@ from airflow.sdk import dag, task         # airflow.sdk = Airflow 3's public aut
 
 
 @dag(
-    dag_id="taskflow_example",
+    dag_id="s1_taskflow_demo",
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),  # tz-aware anchor
     schedule=None,                        # manual trigger only
     catchup=False,
@@ -292,7 +292,7 @@ Same concepts (`@task`, `multiple_outputs`, XCom auto-wiring), but a shape you
 have to reason about - a **diamond**, not a straight line, with one task that
 consumes values from two different upstream tasks.
 
-Create `dags/01_taskflow_foundations.py`, dag_id `01_taskflow_foundations`. A
+Create `dags/s1/taskflow.py`, dag_id `s1_taskflow`. A
 daily-sales mini-pipeline.
 
 **Tasks:**
@@ -321,7 +321,7 @@ fetch_refunds -+                  +---------------------+--> report
 
 **Acceptance criteria:**
 - Graph shows the diamond: both fetches fan into `net_revenue`/onward, and `report` has multiple incoming edges.
-- `airflow dags test 01_taskflow_foundations 2026-01-01` runs all 5 tasks green.
+- `airflow dags test s1_taskflow 2026-01-01` runs all 5 tasks green.
 - The `report` log line shows the right numbers.
 - No `xcom_p` anywhere in the file.
 
@@ -352,10 +352,10 @@ scheduler CPU on every parse cycle, forever.
 ## 9. Verify + commit
 
 ```bash
-python dags/01_taskflow_foundations.py                        # must parse cleanly
-airflow dags test 01_taskflow_foundations 2026-01-01          # runs the whole DAG
+python dags/s1/taskflow.py                        # must parse cleanly
+airflow dags test s1_taskflow 2026-01-01          # runs the whole DAG
 python -m pytest tests/ -v                                    # integrity gates pass
-git add dags/01_taskflow_foundations.py && git commit -m "course: 01 taskflow foundations" && git push
+git add dags/s1/taskflow.py && git commit -m "course: 01 taskflow foundations" && git push
 ```
 
 Done when CI is green. Tick session 01 in `docs/course/README.md`.
@@ -437,7 +437,7 @@ dags/ folder                    DagBag object
 --------------                  ------------------------------
 my_first_dag.py       -+        .dags = {
 task_1_foundations.py  +-import->   "my_first_dag": <DAG>,
-...                   -+            "01_taskflow_foundations": <DAG>,
+...                   -+            "s1_taskflow": <DAG>,
                                 }
                                 .dag_ids       = ["my_first_dag", "01_...", ...]
                                 .import_errors = {}   # files that failed to parse

@@ -1,4 +1,4 @@
-# 02 · Classic Operators & Dependency Helpers
+# Session 02 · Classic Operators & Dependency Helpers
 
 **Goal:** build a DAG the *classic* way - instantiate operator objects and wire
 them explicitly - and understand what an Operator actually is, how `>>` builds
@@ -58,7 +58,7 @@ you can pass these to any operator:
 |---|---|
 | `task_id` | unique name within the DAG (required) |
 | `retries`, `retry_delay` | retry-on-failure behavior |
-| `trigger_rule` | when this task runs relative to upstream (Session 06) |
+| `trigger_rule` | when this task runs relative to upstream (Session 04) |
 | `pool`, `priority_weight` | concurrency control (Session 13) |
 | `execution_timeout` | kill the task if it runs too long |
 | `depends_on_past` | only run if the previous run's same task succeeded |
@@ -259,7 +259,7 @@ from airflow.sdk import DAG, chain
 from airflow.providers.standard.operators.empty import EmptyOperator
 
 with DAG(
-    dag_id="classic_style_demo",
+    dag_id="s2_classic_operators_demo",
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
     schedule=None,
     catchup=False,
@@ -295,15 +295,15 @@ Read the shape:
 Run it:
 
 ```bash
-python dags/classic_style_demo.py
-airflow dags test classic_style_demo 2026-01-01
+python dags/s2/classic_operators_demo.py
+airflow dags test s2_classic_operators_demo 2026-01-01
 ```
 
 ---
 
 ## 10. Build spec - you write this (no solution)
 
-Create `dags/02_classic_operators.py`, dag_id `02_classic_operators`. Build the
+Create `dags/s2/classic_operators.py`, dag_id `s2_classic_operators`. Build the
 **same graph three different ways** to feel the difference between the helpers.
 Use `EmptyOperator` for every task (no real work - this is about wiring).
 
@@ -334,9 +334,9 @@ file, but give the tasks distinct `task_id`s per version, e.g. suffix `_a`,
 - Every DAG-level gate must pass: `tags`, real `owner`, `retries >= 1` via `default_args`.
 
 **Acceptance criteria:**
-- `python dags/02_classic_operators.py` parses cleanly.
+- `python dags/s2/classic_operators.py` parses cleanly.
 - In the UI Graph, all three versions show the identical diamond shape (fan-out to 3, fan-in to load, then notify).
-- `airflow dags test 02_classic_operators 2026-01-01` runs everything green.
+- `airflow dags test s2_classic_operators 2026-01-01` runs everything green.
 - `python -m pytest tests/ -v` stays green.
 
 ---
@@ -354,10 +354,10 @@ Readability of the wiring is a real maintenance cost at 100+ DAGs.
 ## 12. Verify + commit
 
 ```bash
-python dags/02_classic_operators.py
-airflow dags test 02_classic_operators 2026-01-01
+python dags/s2/classic_operators.py
+airflow dags test s2_classic_operators 2026-01-01
 python -m pytest tests/ -v
-git add dags/02_classic_operators.py && git commit -m "course: 02 classic operators" && git push
+git add dags/s2/classic_operators.py && git commit -m "course: 02 classic operators" && git push
 ```
 
 Done when CI is green. Tick session 02 in `docs/course/README.md`.

@@ -156,7 +156,7 @@ CAP = "100000000"   # 100 MB max bytes billed per query — safety cap
 
 
 @dag(
-    dag_id="p1_bq_hello_demo",
+    dag_id="p1_bigquery_hello_demo",
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
     schedule=None,
     catchup=False,
@@ -191,8 +191,8 @@ pipeline()
 Run it:
 
 ```bash
-python dags/p1/p1_bq_hello_demo.py
-airflow dags test p1_bq_hello_demo 2026-01-01
+python dags/p1/bigquery_hello_demo.py
+airflow dags test p1_bigquery_hello_demo 2026-01-01
 ```
 
 Then open the **BigQuery console → Job history** — you'll see the job, and
@@ -205,7 +205,7 @@ or use the `BigQueryHook.get_first` `@task` pattern above.)
 
 ## 6. Build spec — your challenge (no solution)
 
-**File:** `dags/p1/p1_bigquery_hello.py`  ·  **dag_id:** `p1_bigquery_hello`
+**File:** `dags/p1/bigquery_hello.py`  ·  **dag_id:** `p1_bigquery_hello`
 
 Build a DAG that reports a few metrics on the Austin bike-share trips, using the
 BigQuery provider operators, organized with TaskGroups, and cost-capped.
@@ -230,7 +230,7 @@ BigQuery provider operators, organized with TaskGroups, and cost-capped.
 
 **Acceptance criteria:**
 
-- `python dags/p1/p1_bigquery_hello.py` parses (prints nothing).
+- `python dags/p1/bigquery_hello.py` parses (prints nothing).
 - `airflow dags test p1_bigquery_hello 2026-01-01` runs everything green.
 - BigQuery **Job history** shows your queries, each with **Bytes billed within
   the cap** (COUNT is 0 B; the top-5 query scans only the station column).
@@ -271,7 +271,7 @@ separate a toy DAG from a production one:
 ## 7. Verify + commit
 
 ```bash
-python dags/p1/p1_bigquery_hello.py
+python dags/p1/bigquery_hello.py
 airflow dags test p1_bigquery_hello 2026-01-01
 python -m pytest tests/ -v
 git add -A && git commit -m "practical: P1 bigquery hello" && git push

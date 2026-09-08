@@ -1,4 +1,4 @@
-# 03 · TaskGroups
+# Session 03 · TaskGroups
 
 **Goal:** organize a DAG's tasks into named, collapsible groups - understand that
 a TaskGroup is a *visual/logical* wrapper (not a sub-DAG), how `group_id`
@@ -231,7 +231,7 @@ from airflow.sdk import dag, task, task_group
 
 
 @dag(
-    dag_id="task_group_demo",
+    dag_id="s3_task_groups_demo",
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
     schedule=None,
     catchup=False,
@@ -280,15 +280,15 @@ Read the shape:
 Run it (the demo also lives in your session subfolder):
 
 ```bash
-python dags/task-3/task_group_demo.py
-airflow dags test task_group_demo 2026-01-01
+python dags/s3/task_groups_demo.py
+airflow dags test s3_task_groups_demo 2026-01-01
 ```
 
 ---
 
 ## 7. Build spec - your challenge (no solution)
 
-**File:** `dags/task-3/03_task_groups.py`  ·  **dag_id:** `03_task_groups`
+**File:** `dags/s3/task_groups.py`  ·  **dag_id:** `s3_task_groups`
 
 Build a **multi-source ingestion pipeline** in pure TaskFlow.
 
@@ -316,13 +316,13 @@ Build a **multi-source ingestion pipeline** in pure TaskFlow.
 
 **Acceptance criteria (how you'll know it's right):**
 
-- `python dags/task-3/03_task_groups.py` parses (prints nothing).
+- `python dags/s3/task_groups.py` parses (prints nothing).
 - The UI Graph shows **three** collapsible source groups, each containing a
   **nested** checks group sitting between download and stage.
 - The nested check tasks have **doubly-prefixed** ids (e.g. something like
   `<source>.<checks>.<check_name>`) - pick one and run it with
-  `airflow tasks test 03_task_groups <that.full.id> 2026-01-01`.
-- `airflow dags test 03_task_groups 2026-01-01` runs everything green.
+  `airflow tasks test s3_task_groups <that.full.id> 2026-01-01`.
+- `airflow dags test s3_task_groups 2026-01-01` runs everything green.
 - `python -m pytest tests/ -v` stays green.
 
 **One nudge (only if stuck):** you learned the tool for "reuse a group without an
@@ -382,15 +382,15 @@ task's id, so renaming a group renames all its tasks' history.
 ## 9. Verify + commit
 
 ```bash
-python dags/task-3/03_task_groups.py
-airflow dags test 03_task_groups 2026-01-01
+python dags/s3/task_groups.py
+airflow dags test s3_task_groups 2026-01-01
 python -m pytest tests/ -v
 git add -A && git commit -m "course: 03 task groups" && git push
 ```
 
 Done when CI is green. Tick session 03 in `docs/course/README.md`.
 
-> Paths use your subfolder layout: session N lives in `dags/task-N/`. The
+> Paths use your subfolder layout: session N lives in `dags/s<N>/`. The
 > `airflow dags test <dag_id>` and pytest commands are path-independent (they use
 > the dag_id / scan `dags/` recursively); only the `python dags/...py`
 > parse-check needs the real file path.

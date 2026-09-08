@@ -36,12 +36,12 @@ Reference pages (read anytime): [xcom-basics](xcom-basics.md) · [gcp-project](g
 
 ## Now → next bytes
 
-### 🎯 Mission 04 · Give the Pipeline a Brain — branching & trigger rules → [note](04-branching-trigger-rules.md)
+### 🎯 Session 04 · Give the Pipeline a Brain — branching & trigger rules → [note](04-branching-trigger-rules.md)
 *Story: the Product Health report ran on an empty table and told the VP "0 unanswered questions". Give the pipeline a brain.*
 - [x] **4.1** `@task.branch` — read §1, run the branch snippet · *10* ✅ (+ §1 XCom challenge)
 - [x] **4.2** `@task.short_circuit` — read §2, the guard that stops empty runs · *10* ✅ (fix `owner` casing)
 - [ ] **4.3** `TriggerRule` + the 2am trap — read §3–§4 · *10*
-- [ ] **4.4** Build `m04_product_health` on Stack Overflow — §6 mission build, CI-green · *20*
+- [ ] **4.4** Build `s4_product_health` on Stack Overflow — §6 build, CI-green · *20*
 
 ### 05 · Params + Jinja + context → note (to be written)
 - [ ] **5.1** `Param` — declare params, trigger a DAG with config · *10*
@@ -86,14 +86,14 @@ Cosmos · 34 Warehouse push-down ELT · 🔷 P11 DQ gate + dbt on BigQuery
 
 ## 🎬 The project: Stack Overflow Product Health
 
-You're the data engineer on Stack Overflow's analytics team. Every mission adds a
+You're the data engineer on Stack Overflow's analytics team. Every session adds a
 layer to **one** pipeline on `bigquery-public-data.stackoverflow` (questions,
-answers, users, tags) — each session opens with a real on-call scenario, and you
+answers, users, tags) — each one opens with a real on-call scenario, and you
 build the fix.
 
 ```
 Stack Overflow (posts_questions, posts_answers, users, tags)
-  → daily health brain: unanswered backlog, answer rate, tag trends   (M04–M06)
+  → daily health brain: unanswered backlog, answer rate, tag trends   (S4–S6)
   → parametrized + incremental by date                                (P2–P3)
   → GCS raw zone + asset-triggered marts                              (P4–P5)
   → dbt staging + Gold tables; DQ gate + Slack alert                  (P10–P11)
