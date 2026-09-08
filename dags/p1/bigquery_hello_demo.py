@@ -9,7 +9,7 @@ CAP = "100000000"   # 100 MB max bytes billed per query — safety cap
 
 
 @dag(
-    dag_id="p1_bq_hello_demo",
+    dag_id="p1_bigquery_hello_demo",
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
     schedule=None,
     catchup=False,

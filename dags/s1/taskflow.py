@@ -5,7 +5,7 @@ from airflow.sdk import task, dag
 
 
 @dag(
-    dag_id='01_taskflow_foundations',
+    dag_id='s1_taskflow',
     start_date=pendulum.datetime(2026, 8, 30, tz='UTC'),
     catchup=False,
     schedule=None,

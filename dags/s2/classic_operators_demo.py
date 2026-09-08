@@ -6,7 +6,7 @@ from airflow.providers.standard.operators.empty import EmptyOperator
 
 
 with DAG(
-    dag_id="classic_style_demo",
+    dag_id="s2_classic_operators_demo",
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
     schedule=None,
     catchup=False,

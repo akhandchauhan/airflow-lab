@@ -5,7 +5,7 @@ from airflow.sdk import dag, task_group, task
 
 
 @dag(
-    dag_id="03_task_groups",
+    dag_id="s3_task_groups",
     start_date=pendulum.datetime(2026, 9, 1, tz='UTC'),
     catchup=False,
     schedule=None,

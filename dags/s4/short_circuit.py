@@ -4,7 +4,7 @@ from airflow.sdk import dag, task
 
 
 @dag(
-    dag_id="s04_short_circuit_example_exercise",
+    dag_id="s4_short_circuit",
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
     schedule=None,
     catchup=False,
