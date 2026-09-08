@@ -6,14 +6,14 @@ take the points, keep the streak alive.
 
 ## Scoreboard
 
-| | |
-|---|---|
-| **Total points** | 190 |
+|                    |                      |
+| ------------------ | -------------------- |
+| **Total points**   | 190                  |
 | **Current streak** | 1 day (missed 09-07) |
-| **Longest streak** | 3 days |
-| **Last active** | 2026-09-08 |
+| **Longest streak** | 3 days               |
+| **Last active**    | 2026-09-08           |
 
-**Points:** a *learn* byte = **10**, a *build-a-DAG* byte = **20** (counts only when
+**Points:** a _learn_ byte = **10**, a _build-a-DAG_ byte = **20** (counts only when
 its commit is CI-green). **Streak** = consecutive days with at least one byte done.
 Update this scoreboard when you finish a byte.
 
@@ -23,7 +23,7 @@ they live here only.
 
 ---
 
-## Done ✅  (170 pts)
+## Done ✅ (170 pts)
 
 - [x] **01 · TaskFlow** — `@dag`/`@task`, return→XCom, `multiple_outputs`
 - [x] **02 · Classic operators** — `>>`, `chain`, `chain_linear`, `cross_downstream`
@@ -37,34 +37,41 @@ Reference pages (read anytime): [xcom-basics](xcom-basics.md) · [gcp-project](g
 ## Now → next bytes
 
 ### 🎯 Session 04 · Give the Pipeline a Brain — branching & trigger rules → [note](04-branching-trigger-rules.md)
-*Story: the Product Health report ran on an empty table and told the VP "0 unanswered questions". Give the pipeline a brain.*
-- [x] **4.1** `@task.branch` — read §1, run the branch snippet · *10* ✅ (+ §1 XCom challenge)
-- [x] **4.2** `@task.short_circuit` — read §2, the guard that stops empty runs · *10* ✅ (fix `owner` casing)
-- [ ] **4.3** `TriggerRule` + the 2am trap — read §3–§4 · *10*
-- [ ] **4.4** Build `s4_product_health` on Stack Overflow — §6 build, CI-green · *20*
+
+_Story: the Product Health report ran on an empty table and told the VP "0 unanswered questions". Give the pipeline a brain._
+
+- [x] **4.1** `@task.branch` — read §1, run the branch snippet · _10_ ✅ (+ §1 XCom challenge)
+- [x] **4.2** `@task.short_circuit` — read §2, the guard that stops empty runs · _10_ ✅ (fix `owner` casing)
+- [x] **4.3** `TriggerRule` + the 2am trap — read §3–§4 · _10_
+- [ ] **4.4** Build `s4_product_health` on Stack Overflow — §6 build, CI-green · _20_
 
 ### 🎯 Session 05 · The Universal Adapter — hooks in depth → [note](05-hooks.md)
-*Story: a hardcoded DB password broke on rotation and leaked into git. Learn the abstraction that keeps every secret out of your code.*
-- [ ] **5.1** What a hook is — read §1, run the one-liner hook snippet · *10*
-- [ ] **5.2** `get_connection` + the Connection object — read §2 · *10*
-- [ ] **5.3** Resolution order (backend → env → DB) + custom hooks — read §3–§4 · *10*
-- [ ] **5.4** Build `s5_answer_rate` via hooks, no secret in the file — §6 build · *20*
+
+_Story: a hardcoded DB password broke on rotation and leaked into git. Learn the abstraction that keeps every secret out of your code._
+
+- [ ] **5.1** What a hook is — read §1, run the one-liner hook snippet · _10_
+- [ ] **5.2** `get_connection` + the Connection object — read §2 · _10_
+- [ ] **5.3** Resolution order (backend → env → DB) + custom hooks — read §3–§4 · _10_
+- [ ] **5.4** Build `s5_answer_rate` via hooks, no secret in the file — §6 build · _20_
 
 ### 06 · Params + Jinja + context → note (to be written)
-- [ ] **6.1** `Param` — declare params, trigger a DAG with config · *10*
-- [ ] **6.2** Jinja templates — `{{ ds }}`, `{{ params.x }}`, `template_fields` · *10*
-- [ ] **6.3** `get_current_context` — read run info inside a task · *10*
-- [ ] **6.4** Build a parametrized BigQuery DAG · *20*
+
+- [ ] **6.1** `Param` — declare params, trigger a DAG with config · _10_
+- [ ] **6.2** Jinja templates — `{{ ds }}`, `{{ params.x }}`, `template_fields` · _10_
+- [ ] **6.3** `get_current_context` — read run info inside a task · _10_
+- [ ] **6.4** Build a parametrized BigQuery DAG · _20_
 
 ### 07 · Dynamic task mapping (deferred from 04) → [note](07-dynamic-task-mapping.md)
-- [ ] **7.1** `.expand` + `.partial` — read §1–§2, run the mapped example · *10*
-- [ ] **7.2** Reduce — read §7, add the collector task · *10*
-- [ ] **7.3** `.expand_kwargs` / `.zip` / `.map` — read §4–§6 · *10*
-- [ ] **7.4** Build a mapped BigQuery DAG · *20*
+
+- [ ] **7.1** `.expand` + `.partial` — read §1–§2, run the mapped example · _10_
+- [ ] **7.2** Reduce — read §7, add the collector task · _10_
+- [ ] **7.3** `.expand_kwargs` / `.zip` / `.map` — read §4–§6 · _10_
+- [ ] **7.4** Build a mapped BigQuery DAG · _20_
 
 ### 🔷 P2 · Parametrized dynamic load → practical (to be written)
+
 - [ ] Applies 04–06 on `google_analytics_sample.ga_sessions_*`: param date range,
-  dynamic-map over date shards, branch on empty shard. *(broken into bytes when reached)*
+      dynamic-map over date shards, branch on empty shard. _(broken into bytes when reached)_
 
 ---
 
@@ -77,7 +84,7 @@ Reference pages (read anytime): [xcom-basics](xcom-basics.md) · [gcp-project](g
 **Phase C — Data passing, connections, sensors:** 13 XCom deep · 14 XCom backend +
 ObjectStorage · 🔷 P5 BQ→GCS · 16 Variables + Secrets · 17 Sensors ·
 18 Deferrable + Triggerer · 🔷 P6 Secrets + deferrable sensor
-*(Connections + Hooks pulled forward to Session 05.)*
+_(Connections + Hooks pulled forward to Session 05.)_
 
 **Phase D — Isolation, containers, cross-DAG:** 19 Dependency isolation · 20 Container
 tasks · 21 Cross-DAG · 🔷 P7 Isolated transform + cross-DAG · 22 Setup/teardown

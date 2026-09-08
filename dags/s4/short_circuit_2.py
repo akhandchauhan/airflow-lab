@@ -16,7 +16,8 @@ def pipeline():
     def cnt_unanswered_q() -> int:
         return 200_000
 
-    # skips only the direct children, letting further-down tasks (like an ALL_DONE notify) honor their own trigger rule and still run
+    # skips only the direct children, so further-down tasks (like an ALL_DONE
+    # notify) still honor their own trigger rule and run
     @task.short_circuit(ignore_downstream_trigger_rules=False)
     def check_unanswered_cnt(cnt: int):
         return cnt < 0
