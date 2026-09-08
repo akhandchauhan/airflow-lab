@@ -61,13 +61,6 @@ path >> [run_deep_triage(), run_light_triage()]   # the returned task_id runs; t
 - The branch returns a **`task_id` string**, not the function object.
 - The branch and its options must be **directly wired** (`path >> [a, b]`).
 
-> **🎯 Challenge — a branch can start *several* paths.** Extend the example above:
-> add a third task `run_sample_tags` (task_id `sample_tags`), and change
-> `triage_by_size` so that for a **medium** backlog (say 1M–5M) it returns a **list**
-> `["light_triage", "sample_tags"]` — running *both*. Wire the new task under `path`
-> and confirm two paths run at once. *(New facet: `@task.branch` may return a list of
-> task_ids, not just one.)*
-
 ---
 
 ## 2. `@task.short_circuit` — stop early
@@ -89,14 +82,6 @@ has_backlog(count_unanswered()) >> build_report()
 
 Use it as a **guard in front of expensive work**. Branch vs short-circuit: **branch
 chooses between paths; short-circuit decides whether to continue at all.**
-
-> **🎯 Challenge — let a status task survive the skip.** Extend the example: add a
-> `notify` task after `build_report` that must run **even when the guard stops the
-> run**. By default short-circuit skips *all* downstream — so set
-> `@task.short_circuit(ignore_downstream_trigger_rules=False)` and give `notify`
-> `trigger_rule=TriggerRule.ALL_DONE`. Confirm: when `has_backlog` is False,
-> `build_report` skips but `notify` still fires. *(New facet:
-> `ignore_downstream_trigger_rules`.)*
 
 ---
 
@@ -134,13 +119,6 @@ The trigger rules you'll actually use:
 | `ONE_SUCCESS`                 | any one upstream succeeded                         | fan-in where any success is enough        |
 | `ALL_FAILED`                  | every upstream failed                              | run only on total failure                 |
 
-> **🎯 Challenge — page on-call only when it breaks.** Extend the example: add a
-> `page_oncall` task that fires **only if `build_report` failed**, while `notify`
-> still runs always. Pick the trigger rule that means "run when the upstream failed"
-> and wire both below `build_report`. Make `build_report` `raise` once to see
-> `page_oncall` fire and `notify` fire, but not on a clean run. *(New facet:
-> `ALL_FAILED` / failure-triggered tasks.)*
-
 ---
 
 ## 4. The trap that pages you at 2am: skips flow downstream
@@ -159,13 +137,6 @@ triage_by_size ──▶ deep_triage ────┐
 "run as long as nothing failed and at least one parent actually ran." Whenever a
 task sits below a branch, set its trigger rule **on purpose**. This is the #1
 branching bug in production.
-
-> **🎯 Challenge — make it real.** Extend the fix into the actual pipeline: swap the
-> stub `count_unanswered` for a live count with `BigQueryHook.get_first` on
-> `bigquery-public-data.stackoverflow.posts_questions` (`WHERE answer_count = 0`),
-> keep the `NONE_FAILED_MIN_ONE_SUCCESS` join, and confirm `publish` still runs after
-> the skipped path. You've now assembled the §5 reference yourself. *(Bridges P1's
-> `BigQueryHook`.)*
 
 ---
 

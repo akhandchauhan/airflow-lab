@@ -17,7 +17,7 @@ Hard rules for writing course notes (`docs/course/*.md`) and their reference DAG
 ## Code examples
 - **R8** — **Concept snippets highlight ONE mechanic.** Drop the `@dag`/`pipeline()`/imports wrapper; mark the key line (`# ← THE MECHANIC`). BUT every name the snippet references **must be defined in that snippet** — no calls to undefined tasks.
 - **R9** — **Exactly ONE complete runnable DAG per topic**: the "Complete runnable reference" (full `@dag` + `pipeline()` + a `airflow dags test …` run line). From topic 04 on it uses **BigQuery**.
-- **R10** — **After each concept sub-section, add a `🎯 Challenge` that EXTENDS the exact example just shown.** Add functionality to those same tasks that reveals a **new facet of the same concept** (e.g. a branch returning a *list*; short-circuit's `ignore_downstream_trigger_rules`; a new trigger rule), optionally weaving in a prior session. It must be **coherent** with the snippet above — the reader edits that code, not a disconnected new DAG. Problem statement, not solution.
+- **R10** — **No per-subsection challenges.** Do NOT add `🎯 Challenge` blocks after concept sub-sections. A note = concept snippets + the one reference DAG + the single end-of-note build spec (R11). The build spec is the only exercise.
 - **R11** — **Build spec = PROBLEM STATEMENT**, never a solution walkthrough. State what/constraints/acceptance; the user designs the how. Full code lives only in the reference (a different example).
 
 ## Naming
