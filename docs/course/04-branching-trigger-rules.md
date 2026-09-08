@@ -1,130 +1,125 @@
-# 04 · Branching & Trigger Rules
+# Mission 04 · Give the Pipeline a Brain
 
-**One line:** this is how a DAG makes **decisions** — take one path or another,
-stop early when a check fails, and control **when** a task is allowed to run based
-on what happened before it.
+**Branching & trigger rules** — teaching a DAG to make decisions.
 
-Three tools:
+> ## 📟 Cold open — 06:00, your phone buzzes
+> You run the **Product Health** report for Stack Overflow. Every morning it counts
+> the unanswered-question backlog and breaks it down by tag, so the team knows what's
+> drowning. Last Tuesday the upstream load was late, the report ran on an **empty
+> table**, and it cheerfully told the VP that Stack Overflow had **0 unanswered
+> questions**. Slack lit up. Not great.
+>
+> **Today's mission:** give the pipeline a brain. If there's nothing to report, it
+> should **stop itself**. When the backlog is huge, it should do a **deep tag
+> breakdown**; when it's small, a **light summary**. And no matter what happens, it
+> must **always post a status** so you're never guessing whether it ran.
 
-| Tool                  | Plain meaning                                                                       |
-| --------------------- | ----------------------------------------------------------------------------------- |
-| `@task.branch`        | a **fork in the road** — pick which path to take; the other path is skipped         |
-| `@task.short_circuit` | a **stop sign** — if a check is False, skip everything after it                     |
-| `TriggerRule`         | the rule for **when** a task may start (default: only after all its inputs succeed) |
+Three tools do exactly that:
 
----
+| Tool                  | The decision it makes            | Road-trip picture                          |
+| --------------------- | -------------------------------- | ------------------------------------------ |
+| `@task.branch`        | *which path?*                    | a **fork** — one road runs, the other's closed |
+| `@task.short_circuit` | *continue at all?*               | a **"BRIDGE OUT"** barrier — stop           |
+| `TriggerRule`         | *when may a task start?*         | the **rule at a junction** for when you can go |
 
-## 0. The analogy: a road trip
+The full pipeline you'll build:
 
-- **Branch** = a fork in the road. A sign sends you either left or right. The road
-  you don't take is closed off (its tasks are **skipped**).
-- **Short-circuit** = a "BRIDGE OUT" barrier. If the bridge is out (your check
-  returns False), you stop, and everything further down that road is cancelled.
-- **Trigger rule** = the rule at a junction for _when you're allowed to go_.
-  Normally: "go only when all the roads feeding in are clear." But you can change
-  it — for example a cleanup crew that goes in _no matter what happened_.
-
-Keep this picture; every section below maps back to it.
-
-> The snippets in §1–§4 **highlight one mechanic each** — just the lines that
-> matter, not a full DAG. The single complete, runnable DAG that wires everything
-> together is the BigQuery reference in **§6**. After each mechanic, a **🎯 Challenge**
-> asks you to reuse something from an earlier session.
+```
+count_unanswered ─(guard: 0? STOP)─▶ triage_by_size ─┬─▶ deep_triage ──┐
+                                                      └─▶ light_triage ─┴─▶ publish ─▶ notify
+                                                              (NONE_FAILED_MIN_ONE_SUCCESS)   (ALL_DONE)
+```
 
 ---
 
 ## 1. `@task.branch` — pick a path
 
-A branch task is a normal `@task`, but instead of returning data it **returns the
-`task_id`** (a string) of the task you want to run next. Every other task directly
-below the branch is marked **skipped**.
+The branch is the fork. It returns the **`task_id`** (a string) of the path to run;
+every other task wired directly below it is **skipped**.
 
 ```python
-@task.branch                                   # ← THE MECHANIC
-def check_count() -> str:
-    rows = 5000
-    return "incremental_load" if rows > 500 else "full_reload"   # returns a TASK_ID string
+@task
+def count_unanswered() -> int:
+    return 6_000_000                # a stub for now; the real BigQuery count arrives in §6
 
-@task(task_id="incremental_load")
-def run_incremental_load():
-    print("incremental load")
+@task.branch                        # ← THE MECHANIC
+def triage_by_size(backlog: int) -> str:
+    return "deep_triage" if backlog > 5_000_000 else "light_triage"   # returns a TASK_ID
 
-@task(task_id="full_reload")
-def run_full_reload():
-    print("truncate + full reload")
+@task(task_id="deep_triage")
+def run_deep_triage():
+    print("break the backlog down by tag")
 
-path = check_count()
-path >> [run_incremental_load(), run_full_reload()]   # the returned task_id runs; the other is skipped
+@task(task_id="light_triage")
+def run_light_triage():
+    print("just log the total")
+
+path = triage_by_size(count_unanswered())
+path >> [run_deep_triage(), run_light_triage()]   # the returned task_id runs; the other is skipped
 ```
 
 - The branch returns a **`task_id` string**, not the function object.
 - Return a **list** of task_ids to run several paths at once.
-- The branch and its options must be **directly wired** (`path >> [a, b]`), or
-  Airflow can't skip the right ones.
+- The branch and its options must be **directly wired** (`path >> [a, b]`).
 
-> **🎯 Challenge — reuse Session 01 (XCom hand-off).** The branch above reads a
-> hardcoded `rows`. Replace it: add an upstream `@task` that **returns** the row
-> count, and make `check_count(count)` receive that value as an argument — the
-> return→XCom hand-off from Session 01. The branch must now decide from the real
-> returned value, not a constant. (Refresh: [xcom-basics](xcom-basics.md).)
+> **🎯 Challenge — reuse Mission 01 (XCom hand-off).** Right now `count_unanswered`
+> returns a stub. That's already the return→argument hand-off from Mission 01 —
+> prove you get it: add a second upstream task that returns a *threshold*, and make
+> `triage_by_size` take **both** the backlog and the threshold as arguments.
 
 ---
 
 ## 2. `@task.short_circuit` — stop early
 
-A short-circuit task returns **True or False**:
-
-- **True** → keep going, run everything downstream.
-- **False** → **skip everything downstream**.
+The guard. It returns **True** (keep going) or **False** (skip everything below).
+This is what stops the empty-table embarrassment from the cold open.
 
 ```python
-@task.short_circuit                # ← THE MECHANIC
-def has_new_data() -> bool:
-    new_rows = 0
-    return new_rows > 0            # return False → EVERYTHING downstream is skipped
+@task.short_circuit                 # ← THE MECHANIC
+def has_backlog(backlog: int) -> bool:
+    return backlog > 0             # 0 unanswered -> False -> skip the whole run
 
 @task
-def load_data():
-    print("loading data")
+def build_report():
+    print("building the product-health report")
 
-has_new_data() >> load_data()
+has_backlog(count_unanswered()) >> build_report()
 ```
 
-Use it as a **guard**: "only run the expensive work if there's actually something
-to do." This is the single biggest cost saver — don't scan and load when today's
-source is empty.
+Use it as a **guard in front of expensive work**: "only run if there's actually
+something to report." Branch vs short-circuit: **branch chooses between paths;
+short-circuit decides whether to continue at all.**
 
-Branch vs short-circuit: **branch chooses between paths; short-circuit decides
-whether to continue at all.**
-
-> **🎯 Challenge — reuse Session 03 (TaskGroups).** Put the downstream work inside a
-> `@task_group` (an `extract` task + a `load` task grouped together) and wire the
-> short-circuit guard **before** the group. Confirm that when the guard returns
-> False, the **whole group** is skipped in one shot — not task by task.
+> **🎯 Challenge — reuse Mission 03 (TaskGroups).** Put `build_report` and a
+> follow-up `write_summary` inside a `@task_group`, and wire the guard **before** the
+> group. Confirm that when `has_backlog` returns False, the **whole group** goes
+> skipped in one shot — not task by task.
 
 ---
 
 ## 3. `TriggerRule` — when is a task allowed to run?
 
-By default a task runs only when **all** its upstream tasks **succeeded** — that
-rule is `all_success`. You change it per task with `trigger_rule`:
+By default a task runs only when **all** its upstream tasks **succeeded** (the
+`all_success` rule). The `notify` task must run *even when things fail* — so you
+change its rule:
 
 ```python
 from airflow.sdk import TriggerRule
 
 @task
-def load_data():
-    print("loading data")
+def build_report():
+    print("building report")
 
 @task(trigger_rule=TriggerRule.ALL_DONE)     # ← THE MECHANIC: change WHEN a task may run
-def cleanup():
-    print("cleanup runs even if load_data FAILED or was skipped")
+def notify():
+    print("status sent (ran no matter what happened upstream)")
 
-load_data() >> cleanup()
+build_report() >> notify()
 ```
 
-With `ALL_DONE`, `cleanup` runs no matter what happens to `load_data`. On the
-default `ALL_SUCCESS`, a failed or skipped `load_data` would skip `cleanup` too.
+With `ALL_DONE`, `notify` runs whatever happens to `build_report`. On the default
+`ALL_SUCCESS`, a failed or skipped upstream would skip `notify` too — and you'd get
+no status at all.
 
 The trigger rules you'll actually use:
 
@@ -132,78 +127,46 @@ The trigger rules you'll actually use:
 | ----------------------------- | -------------------------------------------------- | ----------------------------------------- |
 | `ALL_SUCCESS` (default)       | every upstream succeeded                           | normal flow                               |
 | `NONE_FAILED_MIN_ONE_SUCCESS` | no upstream failed **and** ≥1 succeeded (skips OK) | a **join after a branch**                 |
-| `ALL_DONE`                    | every upstream finished (success, fail, or skip)   | **cleanup / notify** that must always run |
+| `ALL_DONE`                    | every upstream finished (success, fail, or skip)   | **status / cleanup** that must always run |
 | `ONE_SUCCESS`                 | any one upstream succeeded                         | fan-in where any success is enough        |
 | `ALL_FAILED`                  | every upstream failed                              | run only on total failure                 |
 
-> **🎯 Challenge — reuse Session 02 (parallel wiring).** Using the parallel style
-> from Session 02 (`[task_a, task_b] >> join`), build two parallel tasks where
-> **one raises an error**, both feeding a `summary` task. Leave `summary` on the
-> default rule and watch it get skipped; then pick the trigger rule that makes
-> `summary` run because at least one parent succeeded. Which fits — `ONE_SUCCESS`
-> or `ALL_DONE`? Explain the difference between them.
+> **🎯 Challenge — reuse Mission 02 (parallel wiring).** Using the parallel style
+> from Mission 02 (`[check_a, check_b] >> gate`), build two parallel data-quality
+> checks where **one fails on purpose**, both feeding a `gate` task. Which trigger
+> rule lets `gate` run because at least one check passed — `ONE_SUCCESS` or
+> `ALL_DONE`? Explain the difference.
 
 ---
 
-## 4. The classic gotcha: skips flow downstream
+## 4. The trap that pages you at 2am: skips flow downstream
 
-When a branch **skips** a task, that "skipped" status **passes down** to the tasks
-after it. So if you have two branches that join into one task, the join has a
-skipped parent — and with the default `all_success`, the join gets skipped too,
-even though the other branch succeeded.
+When the branch **skips** a task, that "skipped" status **passes down**. So the
+`publish` task below the two triage paths has one skipped parent every run — and on
+the default `all_success`, **`publish` gets skipped too**, even though the other
+path succeeded. Your report silently never publishes, and the DAG still shows green.
 
 ```
-pick_load_path ──▶ full_refresh ─────┐
-              └──▶ incremental_load ─┴──▶ publish   # one parent is always skipped
+triage_by_size ──▶ deep_triage ────┐
+              └──▶ light_triage ────┴──▶ publish   # one parent is ALWAYS skipped
 ```
 
-Fix: give the join `trigger_rule=TriggerRule.NONE_FAILED_MIN_ONE_SUCCESS`. It means
-"run as long as nothing failed and at least one parent actually ran" — exactly what
-you want after a branch.
+**Fix:** give the join `trigger_rule=TriggerRule.NONE_FAILED_MIN_ONE_SUCCESS` —
+"run as long as nothing failed and at least one parent actually ran." Whenever a
+task sits below a branch, set its trigger rule **on purpose**. This is the #1
+branching bug in production.
 
-**Whenever a task sits below a branch, set its trigger rule deliberately.** This is
-the #1 branching bug.
-
-> **🎯 Challenge — reuse P1 (BigQuery).** Feed the §1 branch a **real** number: use
-> `BigQueryHook.get_first` (from P1) to count rows in
-> `bigquery-public-data.austin_bikeshare.bikeshare_trips`, and branch on that live
-> count instead of a constant. Add a join after the two paths and give it the right
-> trigger rule so the skipped branch doesn't skip it. This is your bridge into §6.
+> **🎯 Challenge — reuse P1 (BigQuery).** Swap the stub `count_unanswered` for a
+> **real** count: `BigQueryHook.get_first("SELECT COUNT(*) FROM
+> \`bigquery-public-data.stackoverflow.posts_questions\` WHERE answer_count = 0")`.
+> Now the whole brain runs on live Stack Overflow data. This is your on-ramp to §6.
 
 ---
 
-## 5. A real BigQuery scenario
+## 5. Complete runnable reference DAG (BigQuery · Stack Overflow)
 
-**The situation:** a daily load job for a sales table.
-
-1. **Guard (short-circuit):** first count today's new rows in the source. If it's
-   **0**, short-circuit → skip the whole load. No point scanning and writing when
-   nothing arrived (and it saves cost).
-2. **Branch:** if there _is_ data, decide _how_ to load based on volume — a small
-   batch takes the `full_refresh` path, a large one takes `incremental_load`.
-3. **Join (publish):** after whichever path ran, one task publishes/marks the load
-   done — with `NONE_FAILED_MIN_ONE_SUCCESS`, so the skipped branch doesn't skip it.
-4. **Notify (all_done):** a final task logs the outcome and (later) sends a Slack
-   message — with `ALL_DONE`, so it runs whether the load succeeded, failed, or was
-   short-circuited.
-
-```
-count_new_rows ─(short-circuit: 0 rows? stop)─▶ choose_load ─┬─▶ full_refresh ────┐
-                                                              └─▶ incremental_load ┴─▶ publish ─▶ notify
-                                                                        (NONE_FAILED_MIN_ONE_SUCCESS)   (ALL_DONE)
-```
-
-Map back to the road trip: the guard is the BRIDGE-OUT barrier, `choose_load` is
-the fork, `publish` is a junction that proceeds if either road got through, and
-`notify` is the crew that always shows up at the end.
-
----
-
-## 6. Complete runnable reference DAG (BigQuery)
-
-Uses the `google_cloud_default` connection from **P1** and the Austin bikeshare
-table. It shows all four pieces on real data: short-circuit guard → branch → join
-with the right trigger rule → always-run notify. Every query is cost-capped.
+The whole brain, wired on the real `posts_questions` table via the P1 connection.
+Every query is cost-capped.
 
 ```python
 from __future__ import annotations
@@ -213,74 +176,76 @@ from airflow.sdk import dag, task, TriggerRule
 from airflow.providers.google.cloud.hooks.bigquery import BigQueryHook
 from airflow.providers.google.cloud.operators.bigquery import BigQueryInsertJobOperator
 
-SRC = "bigquery-public-data.austin_bikeshare.bikeshare_trips"
-CAP = "100000000"          # 100 MB max bytes billed per query
-BIG_THRESHOLD = 1_000_000  # above this many trips, take the "large" path
+QUESTIONS = "bigquery-public-data.stackoverflow.posts_questions"
+CAP = "2000000000"          # 2 GB max bytes billed per query — safety cap
+BIG_BACKLOG = 5_000_000     # above this many unanswered -> the deep path
 
 
 @dag(
-    dag_id="s04_branching_demo",
+    dag_id="m04_product_health_demo",
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
     schedule=None,
     catchup=False,
-    tags=["session-04", "branching", "bigquery"],
+    tags=["mission-04", "branching", "stackoverflow"],
     default_args={"owner": "akhand", "retries": 1},
 )
 def pipeline():
 
     @task
-    def count_trips() -> int:
+    def count_unanswered() -> int:
         hook = BigQueryHook(gcp_conn_id="google_cloud_default", location="US", use_legacy_sql=False)
-        row = hook.get_first(f"SELECT COUNT(*) FROM `{SRC}`")   # COUNT = 0 bytes
+        row = hook.get_first(f"SELECT COUNT(*) FROM `{QUESTIONS}` WHERE answer_count = 0")
         return int(row[0])
 
     @task.short_circuit
-    def has_rows(total: int) -> bool:
-        print(f"total trips = {total:,}")
-        return total > 0                # 0 rows -> skip everything below
+    def has_backlog(backlog: int) -> bool:
+        print(f"unanswered questions = {backlog:,}")
+        return backlog > 0                       # nothing to triage -> skip the run
 
     @task.branch
-    def choose_by_volume(total: int) -> str:
-        # return the TASK_ID string of the path to run; the other is skipped
-        return "summarize_large" if total > BIG_THRESHOLD else "summarize_small"
+    def triage_by_size(backlog: int) -> str:
+        return "deep_triage" if backlog > BIG_BACKLOG else "light_triage"   # returns a TASK_ID
 
-    # variable name (large_path) is kept different from the task_id ("summarize_large"),
-    # which is the string the branch returns
-    large_path = BigQueryInsertJobOperator(
-        task_id="summarize_large",
+    # heavy path: which tags are drowning? (unnests the pipe-delimited tags column)
+    deep_path = BigQueryInsertJobOperator(
+        task_id="deep_triage",
         gcp_conn_id="google_cloud_default",
         location="US",
         configuration={"query": {
-            "query": f"SELECT start_station_name, COUNT(*) AS trips FROM `{SRC}` "
-                     f"GROUP BY start_station_name ORDER BY trips DESC LIMIT 10",
+            "query": f"""
+                SELECT tag, COUNT(*) AS unanswered
+                FROM `{QUESTIONS}`, UNNEST(SPLIT(tags, '|')) AS tag
+                WHERE answer_count = 0
+                GROUP BY tag ORDER BY unanswered DESC LIMIT 10
+            """,
             "useLegacySql": False, "maximumBytesBilled": CAP,
         }},
     )
 
-    small_path = BigQueryInsertJobOperator(
-        task_id="summarize_small",
+    # light path: just the headline number
+    light_path = BigQueryInsertJobOperator(
+        task_id="light_triage",
         gcp_conn_id="google_cloud_default",
         location="US",
         configuration={"query": {
-            "query": f"SELECT start_station_name, COUNT(*) AS trips FROM `{SRC}` "
-                     f"GROUP BY start_station_name ORDER BY trips DESC LIMIT 3",
+            "query": f"SELECT COUNT(*) AS unanswered FROM `{QUESTIONS}` WHERE answer_count = 0",
             "useLegacySql": False, "maximumBytesBilled": CAP,
         }},
     )
 
     @task(trigger_rule=TriggerRule.NONE_FAILED_MIN_ONE_SUCCESS)
-    def publish() -> None:               # join after the branch
-        print("published summary")
+    def publish() -> None:               # join after the branch — survives the skipped path
+        print("product-health summary published")
 
     @task(trigger_rule=TriggerRule.ALL_DONE)
-    def notify() -> None:                # always runs, even on skip/fail
-        print("pipeline finished — sending status")
+    def notify() -> None:                # always runs — success, failure, or skip
+        print("daily run finished — status sent")
 
-    total = count_trips()
-    guard = has_rows(total)
-    decision = choose_by_volume(total)
+    backlog = count_unanswered()
+    guard = has_backlog(backlog)
+    decision = triage_by_size(backlog)
 
-    guard >> decision >> [large_path, small_path] >> publish() >> notify()
+    guard >> decision >> [deep_path, light_path] >> publish() >> notify()
 
 
 pipeline()
@@ -289,101 +254,84 @@ pipeline()
 Run it (needs the P1 BigQuery connection):
 
 ```bash
-python dags/task-4/s04_branching_demo.py
-airflow dags test s04_branching_demo 2026-01-01
+python dags/task-4/m04_product_health_demo.py
+airflow dags test m04_product_health_demo 2026-01-01
 ```
 
-Austin bikeshare has ~2.3M trips (> `BIG_THRESHOLD`), so `summarize_large` runs and
-`summarize_small` is **skipped** (grey in the UI); `publish` still runs because of
-its trigger rule; `notify` runs at the end. Lower `BIG_THRESHOLD` to flip the
-branch, and check **BigQuery Job history** — `count_trips` = 0 B, the summary query
-scans only the station column, under the cap.
+Stack Overflow's unanswered backlog is in the millions (> `BIG_BACKLOG`), so
+`deep_triage` runs and `light_triage` goes **grey** (skipped); `publish` still runs
+thanks to its trigger rule; `notify` runs last. Check **BigQuery Job history** —
+`count_unanswered` scans one column, `deep_triage` stays under the 2 GB cap. Lower
+`BIG_BACKLOG` to flip the branch; set the guard's threshold impossibly high to watch
+the whole run short-circuit while `notify` *still* fires.
 
 ---
 
-## 7. Build spec — your challenge (BigQuery, no solution)
+## 6. Your mission build (no solution)
 
-**File:** `dags/task-4/04_branching.py` · **dag_id:** `s04_branching`
+**File:** `dags/task-4/m04_product_health.py` · **dag_id:** `m04_product_health`
 
-Build a DAG that queries BigQuery, makes a run-time decision from the result,
-protects an expensive step with a guard, and always finishes with a status task.
-Use `bigquery-public-data.austin_bikeshare.bikeshare_trips` (or a table in your own
-dataset).
+Ship the real Product Health brain. It reads a live metric from
+`bigquery-public-data.stackoverflow`, guards against an empty run, branches on the
+metric, and always posts a status.
 
-**The problem:**
+**The mission:**
 
-- A first task reads a **real metric from BigQuery** (for example a row count, or a
-  count of trips for some condition).
-- A **guard** decides from that metric whether the pipeline should continue. If the
-  condition is not met (e.g. the metric is 0), everything after it must be
-  **skipped**.
-- If it continues, a **branch** chooses **one of two** BigQuery query paths based on
-  the metric (e.g. a heavier aggregation vs a lighter one); the path not chosen must
-  be **skipped**.
-- Both paths lead into a single **join** task that must still run even though one
-  branch was skipped.
-- A final **status** task must run **no matter what** happened above (success,
-  failure, or skip).
+- A first task reads a **real metric** from Stack Overflow (unanswered backlog, new
+  questions in a period, a tag's volume — your call).
+- A **guard** (`@task.short_circuit`) stops the whole run if the metric is 0.
+- A **branch** (`@task.branch`) picks one of two BigQuery query paths based on the
+  metric (a heavy breakdown vs a light summary); the other path is skipped.
+- A **join** task publishes the result and must survive the skipped branch.
+- A **status** task runs **no matter what** (success, failure, or short-circuit).
 
-**Constraints:**
+**Rules of engagement:**
 
-- The BigQuery work uses the Google provider — `BigQueryInsertJobOperator` for the
-  query paths and/or `BigQueryHook` for reading the metric — via
-  `google_cloud_default`.
-- **Every query is cost-capped** (`maximumBytesBilled`); no `SELECT *`.
-- Use `@task.short_circuit` for the guard and `@task.branch` for the path choice.
-- The join and the status task must set the correct `TriggerRule` (think about what
-  a skipped branch does to a default-rule join).
-- Keep every Python function/variable name **different** from its `task_id` string,
-  except where a branch must return a `task_id` (there the returned string names the
-  target task on purpose — comment it).
-- Pass the integrity gates: `tags`, a real `owner`, `retries >= 1`.
+- BigQuery work via the Google provider + `google_cloud_default`; **every query
+  cost-capped** (`maximumBytesBilled`), no `SELECT *`.
+- Correct `TriggerRule` on the join and the status task.
+- Names clearly distinct (R12): a `@task.branch` returns the **noun `task_id`**, the
+  functions are verbs (`run_deep_triage`).
+- Passes the integrity gates: `tags`, real `owner`, `retries >= 1`.
 
-**Acceptance criteria:**
+**Mission complete when:**
 
-- `python dags/task-4/04_branching.py` parses (prints nothing).
-- `airflow dags test s04_branching 2026-01-01` runs green.
-- In the graph: exactly one branch runs, the other is skipped, the join still runs,
-  and the status task runs.
-- **BigQuery Job history** shows your queries ran within the byte cap.
-- Flipping the guard's condition (or the branch threshold) changes the outcome as
-  expected.
-- Flip the guard's condition and confirm the whole pipeline below it is skipped —
-  but the always-run status task still runs.
+- `python dags/task-4/m04_product_health.py` parses (prints nothing).
+- `airflow dags test m04_product_health 2026-01-01` runs green.
+- Graph: one path runs, the other skipped, the join runs, status runs.
+- Flip the guard and the branch threshold and watch the outcome change.
+- **BigQuery Job history** shows every query within the cap.
 - `python -m pytest tests/ -v` stays green.
 
-**Nudge (only if stuck):** the shape is the §6 reference —
-`guard(short_circuit) → branch → [pathA, pathB] → join(NONE_FAILED_MIN_ONE_SUCCESS) → status(ALL_DONE)`.
-Change the conditions and what each path does.
+---
+
+## 7. War story — the production tip that would've saved Tuesday
+
+- **A short-circuit guard in front of every expensive stage is the cheapest
+  insurance you'll ever write.** The Tuesday incident — reporting on an empty table —
+  is a `has_backlog`-style guard away from never happening. "Is there new data? Is
+  this the right day? Does the partition exist?" One cheap check saves a wrong number
+  in front of a VP *and* a wasted warehouse bill.
+- **A post-branch task on the default trigger rule is a silent time bomb.** It skips
+  because one branch skipped, the DAG goes green, and the important step quietly never
+  ran — you find out days later when someone asks where the report went. Set
+  `NONE_FAILED_MIN_ONE_SUCCESS` on joins and `ALL_DONE` on status/alerting **on
+  purpose**, with a comment saying why.
 
 ---
 
-## 8. Production tip — guards save money, trigger rules save you at 2 a.m.
-
-- **Put a short-circuit guard in front of every expensive stage.** "Is there new
-  data? Does the partition exist? Is this the right day?" A cheap check that skips a
-  costly BigQuery load is the highest-leverage habit in a warehouse pipeline — you
-  stop paying for work that has nothing to do.
-- **Never leave a post-branch task on the default trigger rule by accident.** A join
-  that silently skips because one branch was skipped is a classic production
-  incident — the pipeline "succeeds" but the important step never ran. Set
-  `NONE_FAILED_MIN_ONE_SUCCESS` on joins and `ALL_DONE` on cleanup/alerting on
-  purpose, and write a comment saying why.
-
----
-
-## 9. Verify + commit
+## 8. Verify + commit
 
 ```bash
-python dags/task-4/04_branching.py
-airflow dags test s04_branching 2026-01-01
+python dags/task-4/m04_product_health.py
+airflow dags test m04_product_health 2026-01-01
 python -m pytest tests/ -v
-git add -A && git commit -m "session 04: branching and trigger rules" && git push
+git add -A && git commit -m "mission 04: product-health brain (branching + trigger rules)" && git push
 ```
 
-Done when the graph shows one path taken, one skipped, the join still running, and
-the status task always running. Tick **04** in `README.md`.
+Mission complete when the graph shows one path taken, one skipped, the join running,
+and status always running. Then update the scoreboard in `README.md`.
 
 Sources:
 [Branching — Astronomer](https://www.astronomer.io/docs/learn/airflow-branch-operator),
-[airflow.sdk API reference](https://airflow.apache.org/docs/task-sdk/stable/api.html)
+[Stack Overflow dataset — BigQuery](https://console.cloud.google.com/marketplace/product/stack-exchange/stack-overflow)

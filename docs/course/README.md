@@ -36,11 +36,12 @@ Reference pages (read anytime): [xcom-basics](xcom-basics.md) · [gcp-project](g
 
 ## Now → next bytes
 
-### 04 · Branching & trigger rules → [note](04-branching-trigger-rules.md)
-- [x] **4.1** `@task.branch` — read §1, run the tiny branch example · *10* ✅ (also did the §1 XCom challenge)
-- [ ] **4.2** `@task.short_circuit` — read §2, run the guard example · *10*
-- [ ] **4.3** `TriggerRule` + the join gotcha — read §3–§4 · *10*
-- [ ] **4.4** Build the BigQuery branching DAG — §7 spec, CI-green · *20*
+### 🎯 Mission 04 · Give the Pipeline a Brain — branching & trigger rules → [note](04-branching-trigger-rules.md)
+*Story: the Product Health report ran on an empty table and told the VP "0 unanswered questions". Give the pipeline a brain.*
+- [x] **4.1** `@task.branch` — read §1, run the branch snippet · *10* ✅ (+ §1 XCom challenge)
+- [ ] **4.2** `@task.short_circuit` — read §2, the guard that stops empty runs · *10*
+- [ ] **4.3** `TriggerRule` + the 2am trap — read §3–§4 · *10*
+- [ ] **4.4** Build `m04_product_health` on Stack Overflow — §6 mission build, CI-green · *20*
 
 ### 05 · Params + Jinja + context → note (to be written)
 - [ ] **5.1** `Param` — declare params, trigger a DAG with config · *10*
@@ -83,18 +84,23 @@ Cosmos · 34 Warehouse push-down ELT · 🔷 P11 DQ gate + dbt on BigQuery
 
 **Phase G — Capstone:** 35 Multi-tenancy · 🔶 36 Capstone (the full BigQuery pipeline)
 
-**Every 3 topics comes a 🔷 practical** on a real `bigquery-public-data` dataset,
-each adding a layer to one growing pipeline:
+## 🎬 The project: Stack Overflow Product Health
+
+You're the data engineer on Stack Overflow's analytics team. Every mission adds a
+layer to **one** pipeline on `bigquery-public-data.stackoverflow` (questions,
+answers, users, tags) — each session opens with a real on-call scenario, and you
+build the fix.
 
 ```
-bigquery-public-data source
-  → dynamic-mapped, partition-by-date extract      (P1–P3)
-  → GCS raw zone via ObjectStoragePath             (P5)
-  → asset-triggered transform in BigQuery          (P4)
-  → dbt staging + marts (Silver/Gold)              (P11)
-  → SQL data-quality gate + Slack alerting         (P10–P11)
-  → retries/deadlines, pools, versioning, CI       (P8–P11)
+Stack Overflow (posts_questions, posts_answers, users, tags)
+  → daily health brain: unanswered backlog, answer rate, tag trends   (M04–M06)
+  → parametrized + incremental by date                                (P2–P3)
+  → GCS raw zone + asset-triggered marts                              (P4–P5)
+  → dbt staging + Gold tables; DQ gate + Slack alert                  (P10–P11)
+  → retries/deadlines, pools, DAG versioning, CI gating               (P8–P11)
 ```
+
+The capstone wires every layer into one alerting, tested, cost-controlled pipeline.
 
 ---
 

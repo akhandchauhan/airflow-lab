@@ -34,5 +34,10 @@ Hard rules for writing course notes (`docs/course/*.md`) and their reference DAG
 - **R20** — **Orchestrate, don't compute.** `BigQueryInsertJobOperator` XCom = the job id, not rows. Pull only small scalars back (via `@task` + `BigQueryHook.get_first`).
 - **R21** — **One production tip per topic.**
 
+## Engagement — missions & story (why the course exists this way)
+- **R23** — **Every topic is a "Mission" with a cold open.** Title = `Mission NN · <memorable name>` (e.g. "Give the Pipeline a Brain"). Open with a **📟 Cold open**: a 2–4 line on-call scenario with real stakes (something broke / someone's waiting on a number), then a one-line "today's mission." The concept is taught as *the fix for that scenario*, never as abstract API.
+- **R24** — **One project spine: Stack Overflow Product Health.** From Mission 04 on, every reference DAG and build uses `bigquery-public-data.stackoverflow` (`posts_questions`, `posts_answers`, `users`, `tags`, `votes`) and adds a layer to the same growing pipeline. Keep the story continuous mission-to-mission; don't invent a fresh unrelated dataset each time. (`posts_questions.tags` is pipe-delimited; `creation_date`/`answer_count` are the workhorse columns.)
+- **R25** — **Production tips are war stories.** Frame the one production tip as "the bug that pages you at 2am," tied back to the cold open — concrete failure + the habit that prevents it. No dry checklist bullets.
+
 ## Format
 - **R22** — Follow the `Structured` output style: answer first, headers/tables over prose, numbered concrete steps, no filler.
