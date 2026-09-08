@@ -30,7 +30,7 @@ they live here only.
 - [x] **03 · TaskGroups** — `@task_group`, nesting, `group_id`
 - [x] **🔷 P1 · BigQuery hello** — count + top-N stations on `austin_bikeshare`, cost-capped
 
-Reference pages (read anytime): [xcom-basics](xcom-basics.md) · [gcp-project](gcp-project.md)
+Reference pages (read anytime): [xcom-basics](xcom-basics.md) · [gcp-project](gcp-project.md) · [unnest](unnest.md)
 
 ---
 
