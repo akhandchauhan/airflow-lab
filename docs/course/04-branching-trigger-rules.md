@@ -18,48 +18,49 @@
 
 ## 📊 The tables you're working with
 
-One project spine: `bigquery-public-data.stackoverflow`. These are the columns this
-session (and the ones after) lean on — join keys in **bold**.
+One project spine: `bigquery-public-data.stackoverflow`. Sample rows below
+(illustrative values, real columns) so you can see the **grain** and shape of each
+table — join keys in **bold**.
 
 **`posts_questions`** · **grain: one row = one question**
 
-| column                | type      | meaning                                             |
-| --------------------- | --------- | --------------------------------------------------- |
-| **`id`**              | INT64     | question id (answers point here via `parent_id`)    |
-| `creation_date`       | TIMESTAMP | when it was asked                                   |
-| `answer_count`        | INT64     | number of answers — **`0` = unanswered**            |
-| `accepted_answer_id`  | INT64     | null if nothing was accepted                        |
-| `score`               | INT64     | net votes                                           |
-| `view_count`          | INT64     | views                                               |
-| `tags`                | STRING    | **pipe-delimited**, e.g. `"python\|pandas\|bigquery"` |
-| `owner_user_id`       | INT64     | FK → `users.id`                                     |
-| `title`               | STRING    | question title                                      |
+| **id**   | creation_date       | answer_count | score | tags                        | view_count |
+| -------- | ------------------- | ------------ | ----- | --------------------------- | ---------- |
+| 231767   | 2008-10-23 22:21:00 | 42           | 11200 | `python\|iterator\|generator` | 3921544    |
+| 11227809 | 2012-06-27 13:51:00 | 25           | 3120  | `python\|list\|dictionary`    | 1450233    |
+| 4700614  | 2011-01-16 04:07:00 | 18           | 2600  | `python\|string\|split`       | 987410     |
+| 79911002 | 2026-08-02 17:44:00 | **0**        | 1     | `python\|airflow\|scheduling` | 47         |
+| 79923410 | 2026-08-14 09:02:00 | **0**        | 0     | `python\|pandas\|bigquery`    | 12         |
 
 **`posts_answers`** · **grain: one row = one answer** (no `tags` / `title`)
 
-| column          | type      | meaning                          |
-| --------------- | --------- | -------------------------------- |
-| **`id`**        | INT64     | answer id                        |
-| **`parent_id`** | INT64     | FK → `posts_questions.id`        |
-| `creation_date` | TIMESTAMP | when it was posted               |
-| `score`         | INT64     | net votes                        |
-| `owner_user_id` | INT64     | FK → `users.id`                  |
+| **id**   | **parent_id** | creation_date       | score | owner_user_id |
+| -------- | ------------- | ------------------- | ----- | ------------- |
+| 231855   | 231767        | 2008-10-23 22:34:00 | 6412  | 28169         |
+| 11227902 | 11227809      | 2012-06-27 13:58:00 | 1890  | 190597        |
+| 4700620  | 4700614       | 2011-01-16 04:15:00 | 3104  | 47214         |
+| 231903   | 231767        | 2008-10-23 22:41:00 | 512   | 9951          |
+| 4700655  | 4700614       | 2011-01-16 04:29:00 | 88    | 63051         |
 
 **`tags`** · **grain: one row = one tag** (tiny dimension table, ~60k rows)
 
-| column     | type  | meaning                                       |
-| ---------- | ----- | --------------------------------------------- |
-| `tag_name` | STRING | e.g. `python` (one tag per row — no pipes)   |
-| `count`    | INT64 | how many questions carry this tag             |
+| id  | tag_name     | count   |
+| --- | ------------ | ------- |
+| 16  | `javascript` | 2512000 |
+| 17  | `python`     | 2148000 |
+| 3   | `java`       | 1901000 |
+| 9   | `c#`         | 1583000 |
+| 820 | `pandas`     | 312000  |
 
 **`users`** · **grain: one row = one user**
 
-| column          | type      | meaning     |
-| --------------- | --------- | ----------- |
-| **`id`**        | INT64     | user id     |
-| `display_name`  | STRING    | name        |
-| `reputation`    | INT64     | rep score   |
-| `creation_date` | TIMESTAMP | signup date |
+| **id** | display_name  | reputation | creation_date       | location        |
+| ------ | ------------- | ---------- | ------------------- | --------------- |
+| 22656  | Jon Skeet     | 1402000    | 2008-09-26 12:01:00 | Reading, UK     |
+| 190597 | user190597    | 84200      | 2009-10-15 08:20:00 | Berlin, Germany |
+| 28169  | Greg Hewgill   | 621000     | 2008-08-27 03:10:00 | New Zealand     |
+| 47214  | Martijn Pieters | 998000    | 2010-11-02 19:44:00 | London, UK      |
+| 9951   | user9951      | 15300      | 2008-09-16 11:05:00 | (null)          |
 
 > `tags` on `posts_questions` is pipe-delimited — explode it with
 > `UNNEST(SPLIT(tags, '|'))`. Cost note: `COUNT(*)` scans **0 bytes**; filtering or
