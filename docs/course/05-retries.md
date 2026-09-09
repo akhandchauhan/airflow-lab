@@ -108,7 +108,7 @@ a pause, and another attempt — until it succeeds. That recovery is the whole p
 
 ## 4. Your build (no solution)
 
-**File:** `dags/s5/flaky_task.py` · **dag_id:** `s5_flaky_task`
+**File:** `dags/s5/s5_task3.py` (scaffold ready) · **dag_id:** `s5_task3`
 
 Build a tiny 2-task plain DAG that survives a flaky task.
 
@@ -120,8 +120,8 @@ Build a tiny 2-task plain DAG that survives a flaky task.
 
 **Done when:**
 
-- `python dags/s5/flaky_task.py` parses (prints nothing).
-- `airflow dags test s5_flaky_task 2026-01-01` runs green — the logs show at least
+- `python dags/s5/s5_task3.py` parses (prints nothing).
+- `airflow dags test s5_task3 2026-01-01` runs green — the logs show at least
   one retry before success.
 - `python -m pytest tests/ -v` stays green.
 
@@ -143,9 +143,8 @@ No BigQuery, no connection, no cost cap — just a plain DAG.
 ## 6. Verify + commit
 
 ```bash
-mkdir -p dags/s5
-python dags/s5/flaky_task.py
-airflow dags test s5_flaky_task 2026-01-01
+python dags/s5/s5_task3.py
+airflow dags test s5_task3 2026-01-01
 python -m pytest tests/ -v
 git add -A && git commit -m "session 05: retries" && git push
 ```

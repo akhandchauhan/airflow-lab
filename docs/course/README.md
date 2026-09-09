@@ -52,9 +52,11 @@ _Story: the Product Health report ran on an empty table and told the VP "0 unans
 
 _Story: a task hit a 1-second network blip at 3am and paged you — a retry would have fixed it on its own._
 
-- [ ] **5.1** `retries` — read §1, a task that fails and tries again · _10_
-- [ ] **5.2** `retry_delay` — read §2, wait between tries · _10_
-- [ ] **5.3** Build `s5_flaky_task` — a plain DAG that recovers, §4 build · _20_
+Starter files are ready in `dags/s5/` — just fill in the task body.
+
+- [ ] **5.1** `retries` — read §1, edit `dags/s5/s5_task1.py` · _10_
+- [ ] **5.2** `retry_delay` — read §2, edit `dags/s5/s5_task2.py` · _10_
+- [ ] **5.3** Build in `dags/s5/s5_task3.py` — a plain DAG that recovers, §4 · _20_
 
 ### 06 · Params + Jinja + context → note (to be written)
 
