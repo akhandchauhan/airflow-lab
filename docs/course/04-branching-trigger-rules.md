@@ -299,54 +299,44 @@ the whole run short-circuit while `notify` *still* fires.
 
 ---
 
-## 6. Assignment — "The Answer-Speed Watchdog" (no solution)
+## 6. Assignment — "The Traffic Watch" (no solution)
 
 **File:** `dags/s4/product_health.py` · **dag_id:** `s4_product_health`
 
 ### The scenario
 
-New VP, new obsession: *"I don't care how big the pile is — I care how **fast** we
-answer. Take last month's questions, measure the median hours to the **first**
-answer, and if we blew past our **24-hour SLA**, tell me which tags are slowest. If
-a month has no data yet, don't send me a garbage number."*
+The VP wants a daily read on **incoming traffic**: *"How many questions with a
+`view_count` over 1000 do we have? If that popular pile is big, break it down by
+tag; if it's small, just give me the number."*
 
-This is a **latency** question, not a size one — so the metric is a `JOIN` between
-`posts_questions` and `posts_answers` with `TIMESTAMP_DIFF`, and the branch fires on
-an **SLA breach**, not a row count. Same S4 shape as the reference; completely
-different brain.
+One table (`posts_questions`), one simple `COUNT`. No joins.
 
 ### The pipeline (5 tasks)
 
 ```
-measure_answer_speed ─(guard: no data? STOP)─▶ route_by_sla ─┬─▶ breach_analysis ──┐
-                                                             └─▶ healthy_summary ──┴─▶ publish ─▶ notify
+count_popular ─(guard: 0? STOP)─▶ route_by_size ─┬─▶ tag_breakdown ──┐
+                                                 └─▶ quick_number ───┴─▶ publish ─▶ notify
 ```
 
-| # | task_id                | type                        | what it must do                                                                                                                                          |
-| - | ---------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1 | `measure_answer_speed` | `@task` + BigQueryHook      | for questions created in `WINDOW` that got ≥1 answer, return the **median hours** to the first answer (`APPROX_QUANTILES`); return `None` if the window is empty |
-| 2 | `has_data`             | `@task.short_circuit`       | stop the whole run if the median is `None` (empty window — the "late upstream" trap, time-based)                                                          |
-| 3 | `route_by_sla`         | `@task.branch`              | median `> 24.0` → `"breach_analysis"`, else `"healthy_summary"` (return the **task_id string**)                                                           |
-| 4a | `breach_analysis`     | `BigQueryInsertJobOperator` | top-10 **slowest tags** in `WINDOW`: median hours-to-first-answer per tag (`UNNEST` the tags), worst first                                                |
-| 4b | `healthy_summary`     | `BigQueryInsertJobOperator` | single-row headline: the median hours + how many questions it covered                                                                                     |
-| 5a | `publish`             | `@task`                     | logs the result — **must survive the skipped branch path**                                                                                                |
-| 5b | `notify`              | `@task`                     | logs "run finished" — **runs on success, failure, OR short-circuit**                                                                                      |
-
-Use a fixed `WINDOW` that has data — the public dataset ends **~Sept 2022**, so
-`WINDOW_START = "2022-08-01"`, `WINDOW_END = "2022-09-01"` works.
+| # | task_id          | type                        | what it must do                                                                          |
+| - | ---------------- | --------------------------- | ---------------------------------------------------------------------------------------- |
+| 1 | `count_popular`  | `@task` + BigQueryHook      | `COUNT(*)` of `posts_questions` where `view_count > 1000`; return the int                 |
+| 2 | `has_rows`       | `@task.short_circuit`       | stop the whole run if the count is `0`                                                    |
+| 3 | `route_by_size`  | `@task.branch`              | `> 500_000` → `"tag_breakdown"`, else `"quick_number"` (return the **task_id string**)    |
+| 4a | `tag_breakdown` | `BigQueryInsertJobOperator` | top-10 tags among those popular questions (`UNNEST` the tags — see [unnest](unnest.md))   |
+| 4b | `quick_number`  | `BigQueryInsertJobOperator` | single-row headline: the count                                                            |
+| 5a | `publish`       | `@task`                     | logs the result — **must survive the skipped branch path**                                |
+| 5b | `notify`        | `@task`                     | logs "run finished" — **runs on success, failure, OR short-circuit**                      |
 
 ### Rules of engagement
 
-- All BigQuery via the Google provider + `google_cloud_default`. **Every operator
-  query cost-capped** with `maximumBytesBilled`; no `SELECT *`. The join reads whole
-  columns (`creation_date`, `parent_id`, `tags`) — **dry-run first** (`bq query
-  --dry_run`) and set the cap just above what it reports (~1–2 GB for the join, more
-  for the tag breakdown since `tags` is a fat column). The `@task` scalar read may
-  use `BigQueryHook.get_first`.
+- BigQuery via the Google provider + `google_cloud_default`. **Cap every operator
+  query** with `maximumBytesBilled` (`"2000000000"` = 2 GB is plenty); no `SELECT *`.
+  The `@task` count may use `BigQueryHook.get_first`.
 - **Pick the two trigger rules yourself** — one for `publish` (join below a branch),
-  one for `notify` (always-run). That choice is the whole point of §3–§4.
+  one for `notify` (always-run). That choice is the point of §3–§4.
 - Names clearly distinct (R12): `task_id` = noun; the branch returns the **noun
-  task_id string**, never a function name; functions are verbs (`run_breach_analysis`).
+  task_id string**; functions are verbs (`run_tag_breakdown`).
 - Passes the integrity gates: non-empty `tags`, real `owner`, `retries >= 1`.
 
 ### Acceptance criteria (this is the grade)
@@ -356,34 +346,21 @@ Use a fixed `WINDOW` that has data — the public dataset ends **~Sept 2022**, s
 | `python dags/s4/product_health.py` parses; `python -m pytest tests/ -v` green | 4 |
 | `airflow dags test s4_product_health 2026-01-01` runs green end-to-end | 4 |
 | Graph proves it: one branch path runs, the other is **skipped (grey)**, `publish` **still runs** | 5 |
-| `notify` runs even when you force `measure_answer_speed` to return `None` (short-circuit) — prove it | 4 |
-| **BigQuery Job history** shows every operator query **within its cap** | 3 |
+| `notify` runs even when you force `count_popular` to return `0` (short-circuit) — prove it | 4 |
+| **BigQuery Job history** shows every operator query **within the 2 GB cap** | 3 |
 
 **20 / 20** = the build byte. Tick **4.4** on the scoreboard.
 
 ### Prove it works (do all three)
 
-1. Real run on Aug 2022 → note which path fired (breach vs healthy) from the logs;
-   `publish` and `notify` both run.
-2. Flip the branch: temporarily hardcode `measure_answer_speed` to return `2.0`
-   (well under the 24h SLA) → `healthy_summary` runs, `breach_analysis` goes grey.
-   Then `99.0` → the other way.
-3. Short-circuit: hardcode `measure_answer_speed` to return `None` → everything
-   skips **except `notify`**, which still fires.
-
-### Stretch (optional, no extra points — just sharper)
-
-- Make `SLA_HOURS = 24.0` and the `WINDOW_*` dates module constants so the DAG
-  retargets in one line.
-- Add a third branch path `page_oncall` for a `> 72.0` "SLA on fire" median.
+1. Real run → note which path fired from the logs; `publish` and `notify` both run.
+2. Flip the branch: temporarily hardcode `count_popular` to return `100` (below the
+   500k threshold) → `quick_number` runs, `tag_breakdown` goes grey.
+3. Short-circuit: hardcode `count_popular` to return `0` → everything skips
+   **except `notify`**, which still fires.
 
 ### Nudges (only if stuck)
 
-- Time-to-first-answer per question: `TIMESTAMP_DIFF(MIN(a.creation_date),
-  q.creation_date, HOUR)` after `JOIN posts_answers a ON a.parent_id = q.id`, grouped
-  per question. Median over that with `APPROX_QUANTILES(h, 2)[OFFSET(1)]`.
-- An empty window makes the median query return one row of `NULL` — read it as
-  `None` in Python and short-circuit on it.
 - `publish` has one skipped parent every run — that's the §4 trap; its trigger rule
   is `NONE_FAILED_MIN_ONE_SUCCESS`, not the default. `notify` needs `ALL_DONE`.
 
