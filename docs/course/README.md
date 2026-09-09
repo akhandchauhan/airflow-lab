@@ -8,10 +8,10 @@ take the points, keep the streak alive.
 
 |                    |                      |
 | ------------------ | -------------------- |
-| **Total points**   | 190                  |
-| **Current streak** | 1 day (missed 09-07) |
+| **Total points**   | 230                  |
+| **Current streak** | 2 days               |
 | **Longest streak** | 3 days               |
-| **Last active**    | 2026-09-08           |
+| **Last active**    | 2026-09-09           |
 
 **Points:** a _learn_ byte = **10**, a _build-a-DAG_ byte = **20** (counts only when
 its commit is CI-green). **Streak** = consecutive days with at least one byte done.
@@ -54,9 +54,9 @@ _Story: a task hit a 1-second network blip at 3am and paged you — a retry woul
 
 Starter files are ready in `dags/s5/` — just fill in the task body.
 
-- [ ] **5.1** `retries` — read §1, edit `dags/s5/s5_task1.py` · _10_
-- [ ] **5.2** `retry_delay` — read §2, edit `dags/s5/s5_task2.py` · _10_
-- [ ] **5.3** Build in `dags/s5/s5_task3.py` — a plain DAG that recovers, §4 · _20_
+- [x] **5.1** `retries` — read §1, edit `dags/s5/s5_task1.py` · _10_
+- [x] **5.2** `retry_delay` — read §2, edit `dags/s5/s5_task2.py` · _10_
+- [x] **5.3** Build in `dags/s5/s5_task3.py` — a plain DAG that recovers, §4 · _20_
 
 ### 06 · Params + Jinja + context → note (to be written)
 

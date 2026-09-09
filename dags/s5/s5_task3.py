@@ -1,12 +1,13 @@
-"""Session 5 · Byte 5.3 — build: a plain DAG that recovers from a flaky task.
+"""Session 5 · Byte 5.3 — a plain DAG that recovers from a flaky task.
 
-Boilerplate is ready. Inside pipeline(), build the two tasks the note (§4) asks for:
-  - fetch  : raises ~half the time; retries=3, retry_delay=10s
-  - report : runs after fetch, prints a done message
-Then run:
+fetch fails ~half the time; with retries=3 + a 10s retry_delay it almost always
+recovers before the run goes red. report runs after it.
     airflow dags test s5_task3 2026-01-01
 """
 from __future__ import annotations
+
+from datetime import timedelta
+import random
 
 import pendulum
 from airflow.sdk import dag, task
@@ -17,16 +18,22 @@ from airflow.sdk import dag, task
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
     schedule=None,
     catchup=False,
-    tags=["session-5"],
-    default_args={"owner": "akhand", "retries": 1},
+    tags=["session-5", "retries"],
+    default_args={"owner": "akhand", "retries": 3, "retry_delay": timedelta(seconds=10)},
 )
 def pipeline():
-    # TODO byte 5.3: replace this stub with fetch (flaky, retries=3) -> report.
-    @task
-    def todo() -> None:
-        print("replace me")
 
-    todo()
+    @task
+    def fetch() -> str:
+        if random.random() < 0.5:          # fails ~half the time
+            raise RuntimeError("network blip — will retry")
+        return "ok"
+
+    @task
+    def report(status: str) -> None:
+        print(f"done — fetch returned {status}")
+
+    report(fetch())
 
 
 pipeline()
