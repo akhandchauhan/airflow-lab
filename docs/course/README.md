@@ -58,12 +58,17 @@ Starter files are ready in `dags/s5/` — just fill in the task body.
 - [x] **5.2** `retry_delay` — read §2, edit `dags/s5/s5_task2.py` · _10_
 - [x] **5.3** Build in `dags/s5/s5_task3.py` — a plain DAG that recovers, §4 · _20_
 
-### 06 · Params + Jinja + context → note (to be written)
+### 🎯 Session 06 · Give the DAG a Dial — params → [note](06-params.md)
 
-- [ ] **6.1** `Param` — declare params, trigger a DAG with config · _10_
-- [ ] **6.2** Jinja templates — `{{ ds }}`, `{{ params.x }}`, `template_fields` · _10_
-- [ ] **6.3** `get_current_context` — read run info inside a task · _10_
-- [ ] **6.4** Build a parametrized BigQuery DAG · _20_
+_Story: the target country was hardcoded — every change meant editing the file and redeploying. A param makes it a dial anyone sets at trigger time._
+
+Starter files are ready in `dags/s6/` — just fill in the task body.
+
+- [ ] **6.1** Declare + read a param — read §1–§3, edit `dags/s6/s6_task1.py` · _10_
+- [ ] **6.2** Pass a value with `--conf` — read §2, edit `dags/s6/s6_task2.py` · _10_
+- [ ] **6.3** Build in `dags/s6/s6_task3.py` — two params + validation, §4 · _20_
+
+_(Jinja templating + `get_current_context` deep-dive deferred to a later session — keeping bytes tiny.)_
 
 ### 07 · Dynamic task mapping (deferred from 04) → [note](07-dynamic-task-mapping.md)
 
