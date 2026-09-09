@@ -1,4 +1,4 @@
-# Session 05 · The Universal Adapter
+# Session 15 · The Universal Adapter
 
 **Hooks in depth** — how a DAG talks to the outside world without ever holding a
 password.
@@ -187,7 +187,7 @@ One DAG, three ways to use hooks: inspect a Connection, read a scalar, read many
 rows — all on the real Stack Overflow tables, all cheap.
 
 ```python
-# dags/s5/answer_rate_demo.py
+# dags/s15/answer_rate_demo.py
 from __future__ import annotations
 
 import pendulum
@@ -201,11 +201,11 @@ TAGS = "bigquery-public-data.stackoverflow.tags"
 
 
 @dag(
-    dag_id="s5_answer_rate_demo",
+    dag_id="s15_answer_rate_demo",
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
     schedule=None,
     catchup=False,
-    tags=["session-5", "hooks", "stackoverflow"],
+    tags=["session-15", "hooks", "stackoverflow"],
     default_args={"owner": "akhand", "retries": 1},
 )
 def pipeline():
@@ -248,8 +248,8 @@ pipeline()
 Run it (needs the P1 BigQuery connection):
 
 ```bash
-python dags/s5/answer_rate_demo.py
-airflow dags test s5_answer_rate_demo 2026-01-01
+python dags/s15/answer_rate_demo.py
+airflow dags test s15_answer_rate_demo 2026-01-01
 ```
 
 You'll see the resolved project printed by `show_connection`, the answer-rate
@@ -267,7 +267,7 @@ percentage from `get_first` (one row), and the top-5 tags from `get_records`
 
 ## 6. Your build (no solution)
 
-**File:** `dags/s5/answer_rate.py` · **dag_id:** `s5_answer_rate`
+**File:** `dags/s15/answer_rate.py` · **dag_id:** `s15_answer_rate`
 
 Ship the real answer-rate layer of Product Health — driven entirely through hooks,
 with no credential anywhere in the file.
@@ -297,8 +297,8 @@ with no credential anywhere in the file.
 
 **Done when:**
 
-- `python dags/s5/answer_rate.py` parses (prints nothing).
-- `airflow dags test s5_answer_rate 2026-01-01` runs green.
+- `python dags/s15/answer_rate.py` parses (prints nothing).
+- `airflow dags test s15_answer_rate 2026-01-01` runs green.
 - The connection task prints the resolved project — and `grep` finds **no**
   password/project literal in the file.
 - **BigQuery Job history** shows every query scanning only what it needs.
@@ -325,8 +325,8 @@ with no credential anywhere in the file.
 
 ```bash
 mkdir -p dags/s5
-python dags/s5/answer_rate.py
-airflow dags test s5_answer_rate 2026-01-01
+python dags/s15/answer_rate.py
+airflow dags test s15_answer_rate 2026-01-01
 python -m pytest tests/ -v
 git add -A && git commit -m "session 05: hooks in depth (answer-rate layer)" && git push
 ```

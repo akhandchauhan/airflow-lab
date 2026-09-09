@@ -43,16 +43,18 @@ _Story: the Product Health report ran on an empty table and told the VP "0 unans
 - [x] **4.1** `@task.branch` — read §1, run the branch snippet · _10_ ✅ (+ §1 XCom challenge)
 - [x] **4.2** `@task.short_circuit` — read §2, the guard that stops empty runs · _10_ ✅ (fix `owner` casing)
 - [x] **4.3** `TriggerRule` + the 2am trap — read §3–§4 · _10_
-- [ ] **4.4** Build `s4_product_health` on Stack Overflow — §6 build, CI-green · _20_
+- [~] **4.4** ~~Build `s4_product_health`~~ — **skipped** (concepts done in 4.1–4.3)
 
-### 🎯 Session 05 · The Universal Adapter — hooks in depth → [note](05-hooks.md)
+> **Current mode: slower + simpler.** Short bytes, one tiny idea each, **plain DAGs
+> — no BigQuery** for a while, until it feels easy.
 
-_Story: a hardcoded DB password broke on rotation and leaked into git. Learn the abstraction that keeps every secret out of your code._
+### 🎯 Session 05 · When a Task Falls Over — retries → [note](05-retries.md)
 
-- [ ] **5.1** What a hook is — read §1, run the one-liner hook snippet · _10_
-- [ ] **5.2** `get_connection` + the Connection object — read §2 · _10_
-- [ ] **5.3** Resolution order (backend → env → DB) + custom hooks — read §3–§4 · _10_
-- [ ] **5.4** Build `s5_answer_rate` via hooks, no secret in the file — §6 build · _20_
+_Story: a task hit a 1-second network blip at 3am and paged you — a retry would have fixed it on its own._
+
+- [ ] **5.1** `retries` — read §1, a task that fails and tries again · _10_
+- [ ] **5.2** `retry_delay` — read §2, wait between tries · _10_
+- [ ] **5.3** Build `s5_flaky_task` — a plain DAG that recovers, §4 build · _20_
 
 ### 06 · Params + Jinja + context → note (to be written)
 
@@ -82,9 +84,9 @@ _Story: a hardcoded DB password broke on rotation and leaked into git. Learn the
 12 Event-driven · 🔷 P4 Asset-driven BQ pipeline
 
 **Phase C — Data passing, connections, sensors:** 13 XCom deep · 14 XCom backend +
-ObjectStorage · 🔷 P5 BQ→GCS · 16 Variables + Secrets · 17 Sensors ·
-18 Deferrable + Triggerer · 🔷 P6 Secrets + deferrable sensor
-_(Connections + Hooks pulled forward to Session 05.)_
+ObjectStorage · [15 Connections + Hooks](15-hooks.md) · 🔷 P5 BQ→GCS ·
+16 Variables + Secrets · 17 Sensors · 18 Deferrable + Triggerer ·
+🔷 P6 Secrets + deferrable sensor
 
 **Phase D — Isolation, containers, cross-DAG:** 19 Dependency isolation · 20 Container
 tasks · 21 Cross-DAG · 🔷 P7 Isolated transform + cross-DAG · 22 Setup/teardown
