@@ -10,7 +10,7 @@ Then run:
 from __future__ import annotations
 
 import pendulum
-from airflow.sdk import dag, task
+from airflow.sdk import dag, task, Param, get_current_context
 
 
 @dag(
@@ -19,14 +19,19 @@ from airflow.sdk import dag, task
     schedule=None,
     catchup=False,
     tags=["session-7"],
+    params = {
+        'country':Param('IN', type ='string'),
+        'limit':Param(10,type='integer', minimum =1),
+        'env':Param('dev', type ="string", enum =['dev','prod']),
+    },
     default_args={"owner": "akhand", "retries": 1},
 )
 def pipeline():
     # TODO byte 6.3: add the two params above; read both; print the report line.
-    @task
+    @task(retries = 2)
     def todo() -> None:
-        print("replace me")
-
+        inputs = get_current_context()['params']
+        print(f"report for {inputs['country']}, top {inputs['limit']}, {inputs['env']}")
     todo()
 
 
