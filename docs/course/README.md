@@ -13,83 +13,35 @@ take the points, keep the streak alive.
 | **Longest streak** | 3 days     |
 | **Last active**    | 2026-09-09 |
 
-**Points:** a _learn_ byte = **10**, a _build-a-DAG_ byte = **20** (counts only when
-its commit is CI-green). **Streak** = consecutive days with at least one byte done.
-Update this scoreboard when you finish a byte.
+**Points:** each session ≈ **10 per concept** + **20 for its build DAG** (build counts
+when its commit is CI-green). **Streak** = consecutive days you do something. Update
+the scoreboard when you finish a session.
 
-**How a byte works:** open the topic note, read only that byte's section, run the
-tiny example or build the small thing, tick the box. No note repeats these rules —
-they live here only.
+**How it works:** open the session note, read it, run the reference DAG, do the build
+in its `dags/s<N>/` scaffold, tick the session below. Rules live here only — the notes
+don't repeat them.
 
 ---
 
-## Done ✅ (170 pts)
+## Done ✅
 
-- [x] **01 · TaskFlow** — `@dag`/`@task`, return→XCom, `multiple_outputs`
-- [x] **02 · Classic operators** — `>>`, `chain`, `chain_linear`, `cross_downstream`
-- [x] **03 · TaskGroups** — `@task_group`, nesting, `group_id`
-- [x] **🔷 P1 · BigQuery hello** — count + top-N stations on `austin_bikeshare`, cost-capped
+- [x] **01 · TaskFlow** — `@dag`/`@task`, return→XCom → [note](01-taskflow-foundations.md)
+- [x] **02 · Classic operators** — `>>`, `chain`, `cross_downstream` → [note](02-classic-operators.md)
+- [x] **03 · TaskGroups** — `@task_group`, nesting, `group_id` → [note](03-task-groups.md)
+- [x] **🔷 P1 · BigQuery hello** — count + top-N, cost-capped → [note](P1-bigquery-hello.md)
+- [x] **04 · Give the Pipeline a Brain** — branching & trigger rules → [note](04-branching-trigger-rules.md) _(build skipped)_
+- [x] **05 · When a Task Falls Over** — retries → [note](05-retries.md)
+- [x] **06 · Inside the Warehouse** — BigQuery ground-up → advanced → [note](06-bigquery.md)
 
 Reference pages (read anytime): [xcom-basics](xcom-basics.md) · [gcp-project](gcp-project.md) · [unnest](unnest.md)
 
 ---
 
-## Now → next bytes
+## Now → next
 
-### 🎯 Session 04 · Give the Pipeline a Brain — branching & trigger rules → [note](04-branching-trigger-rules.md)
-
-_Story: the Product Health report ran on an empty table and told the VP "0 unanswered questions". Give the pipeline a brain._
-
-- [x] **4.1** `@task.branch` — read §1, run the branch snippet · _10_ ✅ (+ §1 XCom challenge)
-- [x] **4.2** `@task.short_circuit` — read §2, the guard that stops empty runs · _10_ ✅ (fix `owner` casing)
-- [x] **4.3** `TriggerRule` + the 2am trap — read §3–§4 · _10_
-- [~] **4.4** ~~Build `s4_product_health`~~ — **skipped** (concepts done in 4.1–4.3)
-
-> **Current mode: slower + simpler.** Short bytes, one tiny idea each. Sessions 05
-> and 07 are plain DAGs (no BigQuery); Session 06 is a BigQuery knowledge session.
-
-### 🎯 Session 05 · When a Task Falls Over — retries → [note](05-retries.md)
-
-_Story: a task hit a 1-second network blip at 3am and paged you — a retry would have fixed it on its own._
-
-Starter files are ready in `dags/s5/` — just fill in the task body.
-
-- [x] **5.1** `retries` — read §1, edit `dags/s5/s5_task1.py` · _10_
-- [x] **5.2** `retry_delay` — read §2, edit `dags/s5/s5_task2.py` · _10_
-- [x] **5.3** Build in `dags/s5/s5_task3.py` — a plain DAG that recovers, §4 · _20_
-
-### 🎯 Session 06 · Inside the Warehouse — BigQuery ground-up → advanced → [note](06-bigquery.md)
-
-_Story: a teammate's unfiltered `SELECT *` scanned 4 TB and turned a $0 dashboard into a real bill. Learn what BigQuery actually charges for._
-
-A reference session: mostly reading, one runnable DAG, one small build. Uses the P1 connection.
-
-- [x] **6.1** Architecture — read §1 (storage/compute, Dremel/Colossus, projects/datasets) · _10_
-- [x] **6.2** Billing + columnar model — read §2 (bytes scanned, `SELECT *`, free tier) · _10_
-- [x] **6.3** Partitioning + clustering — read §3 (pruning, `maximumBytesBilled`) · _10_
-- [x] **6.4** Table types + idempotent loads — read §4 (`MERGE` / `WRITE_TRUNCATE`) · _10_
-- [x] **6.5** Run the reference DAG — §5, `dags/s6/s6_task1.py` · _10_
-- [x] **6.6** Build in `dags/s6/s6_task2.py` — a capped BigQuery DAG, §6 · _20_
-
-### Session 07 · Params → [note](07-params.md)
-
-Make a DAG take input at trigger time instead of hardcoding values. Plain DAGs (no BigQuery). Starter files in `dags/s7/`.
-
-- [ ] **7.1** Declare + read a param — read §1–§3, edit `dags/s7/s7_task1.py` · _10_
-- [ ] **7.2** Pass a value with `--conf` — read §4, edit `dags/s7/s7_task2.py` · _10_
-- [ ] **7.3** Build in `dags/s7/s7_task3.py` — three params + validation, §6 · _20_
-
-### 08 · Dynamic task mapping (deferred from 04) → [note](08-dynamic-task-mapping.md)
-
-- [ ] **8.1** `.expand` + `.partial` — read §1–§2, run the mapped example · _10_
-- [ ] **8.2** Reduce — read §7, add the collector task · _10_
-- [ ] **8.3** `.expand_kwargs` / `.zip` / `.map` — read §4–§6 · _10_
-- [ ] **8.4** Build a mapped BigQuery DAG · _20_
-
-### 🔷 P2 · Parametrized dynamic load → practical (to be written)
-
-- [ ] Applies 04–06 on `google_analytics_sample.ga_sessions_*`: param date range,
-      dynamic-map over date shards, branch on empty shard. _(broken into bytes when reached)_
+- [ ] **07 · Params** — input at trigger time; starter files in `dags/s7/` → [note](07-params.md)
+- [ ] **08 · Dynamic task mapping** — `.expand` / `.partial`, fan out at runtime → [note](08-dynamic-task-mapping.md)
+- [ ] **🔷 P2 · Parametrized dynamic load** — applies 04–08 on `ga_sessions_*` (to be written)
 
 ---
 
