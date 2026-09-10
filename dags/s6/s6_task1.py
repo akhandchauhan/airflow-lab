@@ -1,14 +1,16 @@
-"""Session 6 · Byte 6.5 — run the BigQuery reference DAG.
-
-Boilerplate is ready. Paste the reference DAG from the note (§5) here — a capped
-BigQueryInsertJobOperator, a BigQueryCheckOperator gate, and a BigQueryHook read —
-then run (needs the google_cloud_default connection):
-    airflow dags test s6_task1 2026-01-01
-"""
 from __future__ import annotations
-
 import pendulum
 from airflow.sdk import dag, task
+from airflow.providers.google.cloud.operators.bigquery import (
+    BigQueryInsertJobOperator,
+    BigQueryCheckOperator,
+)
+from airflow.providers.google.cloud.hooks.bigquery import BigQueryHook
+
+
+CONN = "google_cloud_default"
+QUESTIONS = "bigquery-public-data.stackoverflow.posts_questions"
+CAP = "2000000000"
 
 
 @dag(
@@ -16,16 +18,37 @@ from airflow.sdk import dag, task
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
     schedule=None,
     catchup=False,
-    tags=["session-6"],
+    tags=["session-6", "bigquery"],
     default_args={"owner": "akhand", "retries": 1},
 )
 def pipeline():
-    # TODO byte 6.5: replace this stub with the §5 reference (InsertJob -> Check -> Hook).
-    @task
-    def todo() -> None:
-        print("replace me")
 
-    todo()
+    run_count = BigQueryInsertJobOperator(
+        task_id="run_count",
+        gcp_conn_id=CONN,
+        location='US',
+        configuration={"query": {
+            "query": f"SELECT COUNT(*) FROM `{QUESTIONS}` WHERE answer_count = 0",
+            "useLegacySql": False,
+            "maximumBytesBilled": CAP,
+        }},
+    )
+    check_has_rows = BigQueryCheckOperator(
+        task_id='check_has_rows',
+        gcp_conn_id=CONN,
+        use_legacy_sql=False,
+        sql=f"SELECT COUNT(*) FROM `{QUESTIONS}` WHERE answer_count = 0",
+    )
+
+    @task
+    def log_scaler() -> None:
+        hook = BigQueryHook(
+            gcp_conn_id=CONN, use_legacy_sql=False, location='US')
+        n = hook.get_first(
+            f"SELECT COUNT(*) FROM `{QUESTIONS}` WHERE answer_count = 0")[0]
+        print(f"answered questions = {int(n):,}")
+
+    run_count >> check_has_rows >> log_scaler()
 
 
 pipeline()
