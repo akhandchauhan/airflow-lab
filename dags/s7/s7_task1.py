@@ -8,7 +8,7 @@ get_current_context()["params"] (see the note, §1–§3), then run:
 from __future__ import annotations
 
 import pendulum
-from airflow.sdk import dag, task
+from airflow.sdk import dag, task, Param
 
 
 @dag(
@@ -17,13 +17,18 @@ from airflow.sdk import dag, task
     schedule=None,
     catchup=False,
     tags=["session-7"],
+    params = {
+        "name":"Panda-Singh",
+        "num_range":Param(1, type ='integer', minimum = -1, maximum = 12),
+        "check":Param(False,type = 'bool')
+    },
     default_args={"owner": "akhand", "retries": 1},
 )
 def pipeline():
     # TODO byte 6.1: add params= to @dag above; read them here via get_current_context().
     @task
     def todo() -> None:
-        print("replace me")
+        
 
     todo()
 
