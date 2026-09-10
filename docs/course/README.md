@@ -6,12 +6,12 @@ take the points, keep the streak alive.
 
 ## Scoreboard
 
-|                    |                      |
-| ------------------ | -------------------- |
-| **Total points**   | 230                  |
-| **Current streak** | 2 days               |
-| **Longest streak** | 3 days               |
-| **Last active**    | 2026-09-09           |
+|                    |            |
+| ------------------ | ---------- |
+| **Total points**   | 230        |
+| **Current streak** | 2 days     |
+| **Longest streak** | 3 days     |
+| **Last active**    | 2026-09-09 |
 
 **Points:** a _learn_ byte = **10**, a _build-a-DAG_ byte = **20** (counts only when
 its commit is CI-green). **Streak** = consecutive days with at least one byte done.
@@ -64,22 +64,20 @@ _Story: a teammate's unfiltered `SELECT *` scanned 4 TB and turned a $0 dashboar
 
 A reference session: mostly reading, one runnable DAG, one small build. Uses the P1 connection.
 
-- [ ] **6.1** Architecture — read §1 (storage/compute, Dremel/Colossus, projects/datasets) · _10_
-- [ ] **6.2** Billing + columnar model — read §2 (bytes scanned, `SELECT *`, free tier) · _10_
-- [ ] **6.3** Partitioning + clustering — read §3 (pruning, `maximumBytesBilled`) · _10_
-- [ ] **6.4** Table types + idempotent loads — read §4 (`MERGE` / `WRITE_TRUNCATE`) · _10_
-- [ ] **6.5** Run the reference DAG — §5, `dags/s6/s6_task1.py` · _10_
-- [ ] **6.6** Build in `dags/s6/s6_task2.py` — a capped BigQuery DAG, §6 · _20_
+- [x] **6.1** Architecture — read §1 (storage/compute, Dremel/Colossus, projects/datasets) · _10_
+- [x] **6.2** Billing + columnar model — read §2 (bytes scanned, `SELECT *`, free tier) · _10_
+- [x] **6.3** Partitioning + clustering — read §3 (pruning, `maximumBytesBilled`) · _10_
+- [x] **6.4** Table types + idempotent loads — read §4 (`MERGE` / `WRITE_TRUNCATE`) · _10_
+- [x] **6.5** Run the reference DAG — §5, `dags/s6/s6_task1.py` · _10_
+- [x] **6.6** Build in `dags/s6/s6_task2.py` — a capped BigQuery DAG, §6 · _20_
 
-### 🎯 Session 07 · Give the DAG a Dial — params → [note](07-params.md)
+### Session 07 · Params → [note](07-params.md)
 
-_Story: the target country was hardcoded — every change meant editing the file. A param makes it a dial anyone sets at trigger time._
-
-Plain DAGs (no BigQuery). Starter files in `dags/s7/`.
+Make a DAG take input at trigger time instead of hardcoding values. Plain DAGs (no BigQuery). Starter files in `dags/s7/`.
 
 - [ ] **7.1** Declare + read a param — read §1–§3, edit `dags/s7/s7_task1.py` · _10_
-- [ ] **7.2** Pass a value with `--conf` — read §2, edit `dags/s7/s7_task2.py` · _10_
-- [ ] **7.3** Build in `dags/s7/s7_task3.py` — two params + validation, §4 · _20_
+- [ ] **7.2** Pass a value with `--conf` — read §4, edit `dags/s7/s7_task2.py` · _10_
+- [ ] **7.3** Build in `dags/s7/s7_task3.py` — three params + validation, §6 · _20_
 
 ### 08 · Dynamic task mapping (deferred from 04) → [note](08-dynamic-task-mapping.md)
 

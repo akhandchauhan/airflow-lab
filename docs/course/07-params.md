@@ -1,72 +1,142 @@
-# Session 07 · Give the DAG a Dial
+# Session 07 · Params
 
-**Params** — let someone pass a value in when they run the DAG, with no code change.
-
-> ## 📟 Cold open
-> The target country was hardcoded in your DAG: `country = "IN"`. Every time
-> marketing wanted a different one, you edited the file, committed, and waited for a
-> redeploy — just to change two letters. There's a dial for exactly this.
->
-> **Today:** turn a hardcoded value into a **param** anyone can set at trigger time.
-
-No BigQuery. Plain tasks. A param is a **dial on the outside of the machine** — you
-change the setting without opening it up.
+**Goal:** make a DAG take **input at trigger time** instead of hardcoding values —
+understand that a Param is a *declared, validated input with a default*, where the
+declaration is read at **parse time** and the actual value is bound at **run time**
+from the DAG run's `conf`. Plain DAGs, no BigQuery.
 
 ---
 
-## 1. Declare a param
+## 1. What a Param is (and what it is NOT)
 
-Add a `params` dict to `@dag`. Each entry is a name and a default (wrap it in
-`Param(...)` when you want a type or validation).
+A **Param is a named input to a DAG**: a default value, an optional type, and
+optional validation rules. You declare params on the DAG; whoever triggers a run can
+override them.
+
+The mechanism is the same parse-time / run-time split as XCom (Session 01):
+
+```
+PARSE TIME                          RUN TIME (a triggered run)
+----------                          --------------------------
+@dag(params={"name": Param(...)})   run conf {"name": "Panda"} merged over defaults
+  → the DECLARATION is read           → validated against the Param rules
+    when the file is parsed           → exposed in the task context as params["name"]
+```
+
+- At **parse time** Airflow reads the `params={...}` dict — the *shape* of the input.
+- At **run time** the concrete values come from the run's **`conf`**, merged over the
+  defaults, validated, and handed to tasks as `context["params"]`.
+
+What it is **NOT**:
+
+| Not this | Because |
+|---|---|
+| a **Variable** | Variables are global, stored in the metadata DB, shared across *all* DAGs; a Param is scoped to **one DAG run**, set at trigger |
+| an **XCom** | XCom passes data **task → task** during a run; a Param is input **into** the run, from outside |
+| an env var / config | Params are per-run and validated; config is static and global |
+
+Reach for a Param when the same DAG should run with different inputs — a date range, a
+country, a batch size, a dry-run flag — without editing code.
+
+---
+
+## 2. Declaring params
+
+Add a `params` dict to `@dag`. Each entry maps a name to a **default** — a bare value,
+or a `Param(...)` when you want a type and validation.
 
 ```python
 from airflow.sdk import dag, Param
 
 @dag(
-    dag_id="s7_task1",
-    params={"name": Param("world", type="string")},   # ← THE MECHANIC: one dial, default "world"
-    # ... start_date, schedule, etc.
+    dag_id="...",
+    params={
+        "name": "world",                                  # bare default (untyped)
+        "times": Param(1, type="integer", minimum=1),     # typed + validated
+    },
 )
 def pipeline():
     ...
 ```
 
-- Bare default: `params={"name": "world"}`. Typed/validated: `Param("world", type="string")`.
-- The default means the DAG **always runs** even if nobody passes a value.
+- `Param(default, ...)` — the **first argument is the default**.
+- Validation is **JSON-Schema** under the hood. The ones you'll actually use:
+
+| Rule | Example | Meaning |
+|---|---|---|
+| `type` | `type="integer"` | `"string"`, `"integer"`, `"number"`, `"boolean"`, `"array"`, `"object"` |
+| `minimum` / `maximum` | `minimum=1, maximum=10` | numeric bounds |
+| `enum` | `enum=["dev", "prod"]` | value must be one of these |
+| `minLength` / `maxLength` | `minLength=2` | string length bounds |
+
+- **Allowing null:** a typed Param rejects `None`. To allow it, use a list type:
+  `Param(None, type=["null", "string"])`.
+- **A Param with no default** and a type that forbids null becomes **required** — the
+  DAG can't complete a run until a value is supplied at trigger.
 
 ---
 
-## 2. Read it, and pass a value
+## 3. Reading params in a task
 
-Inside a task, the params live in the run context.
+The values live in the run context. Two ways in TaskFlow:
 
 ```python
 from airflow.sdk import task, get_current_context
 
 @task
 def greet() -> None:
-    params = get_current_context()["params"]     # ← THE MECHANIC: read the params dict
+    params = get_current_context()["params"]     # the whole params dict
     print(f"hello {params['name']}")
 ```
 
-Run it with the default, then override the dial:
-
-```bash
-airflow dags test s7_task1 2026-01-01                          # uses default → "hello world"
-airflow dags test s7_task1 2026-01-01 --conf '{"name": "Panda"}'   # → "hello Panda"
+```python
+@task
+def greet(**context) -> None:                    # or grab context via **kwargs
+    print(f"hello {context['params']['name']}")
 ```
 
-`--conf` is a JSON string; its values override the defaults for that run.
+And in any **templated** field, params are available as Jinja:
+
+```python
+BashOperator(task_id="echo", bash_command="echo {{ params.name }}")
+```
+
+`get_current_context()` is the TaskFlow-native way and reads clearly — prefer it.
 
 ---
 
-## 3. Complete runnable reference DAG (plain)
+## 4. Passing values at trigger time
 
-Two dials — a string and a validated integer. Build this in your `s7_task1.py`
-scaffold and run it.
+Four ways to set params on a run; all override the defaults:
+
+| How | Command / place |
+|---|---|
+| **CLI test** (what you'll use) | `airflow dags test <dag> <date> --conf '{"name": "Panda"}'` |
+| **CLI trigger** (scheduler) | `airflow dags trigger <dag> --conf '{"name": "Panda"}'` |
+| **UI** | the **Trigger DAG** form — edit params, then run |
+| **From another DAG** | `TriggerDagRunOperator(..., conf={"name": "Panda"})` |
+
+`--conf` is a **JSON string**. Its values override the defaults for that one run, then
+validation runs — a value that breaks a rule **rejects the run before any task
+starts**.
+
+**Precedence**, lowest to highest:
+
+```
+dag-level Param default   <   task-level param   <   run conf (what the trigger passes)
+```
+
+(The run conf overriding the default relies on `core.dag_run_conf_overrides_params`,
+which is **True** by default.)
+
+---
+
+## 5. A complete runnable DAG (your reference)
+
+A whole file: three param types (string, bounded integer, boolean), read in one task.
+Names are kept plain and distinct.
 
 ```python
-# dags/s7/s7_task1.py
 from __future__ import annotations
 
 import pendulum
@@ -81,7 +151,8 @@ from airflow.sdk import dag, task, Param, get_current_context
     tags=["session-7", "params"],
     params={
         "name": Param("world", type="string"),
-        "times": Param(1, type="integer", minimum=1),   # must be >= 1
+        "times": Param(1, type="integer", minimum=1, maximum=10),   # 1..10
+        "shout": Param(False, type="boolean"),
     },
     default_args={"owner": "akhand", "retries": 1},
 )
@@ -90,8 +161,11 @@ def pipeline():
     @task
     def greet() -> None:
         params = get_current_context()["params"]
+        message = f"hello {params['name']}"
+        if params["shout"]:
+            message = message.upper()
         for _ in range(params["times"]):
-            print(f"hello {params['name']}")
+            print(message)
 
     greet()
 
@@ -99,65 +173,90 @@ def pipeline():
 pipeline()
 ```
 
+Run it three ways:
+
 ```bash
-python dags/s7/s7_task1.py
-airflow dags test s7_task1 2026-01-01
-airflow dags test s7_task1 2026-01-01 --conf '{"name": "Panda", "times": 3}'
+python dags/s7/s7_task1.py                                          # parses
+airflow dags test s7_task1 2026-01-01                               # defaults → "hello world"
+airflow dags test s7_task1 2026-01-01 --conf '{"name": "Panda", "times": 3, "shout": true}'
 ```
 
-The second run prints the greeting three times to "Panda". Try `--conf '{"times":
-0}'` and watch it **reject the run** — `minimum=1` validation fired before any task
-ran. That early rejection is the real value of typed params.
+The last run prints `HELLO PANDA` three times. Now break a rule on purpose:
+
+```bash
+airflow dags test s7_task1 2026-01-01 --conf '{"times": 99}'       # maximum=10 → REJECTED
+```
+
+The run is rejected **before `greet` runs** — validation caught `times > 10`. That
+early rejection is the real payoff of typed params: a bad input fails fast, not three
+tasks deep.
 
 ---
 
-## 4. Your build (no solution)
+## 6. Build spec — your challenge (no solution)
 
-**File:** `dags/s7/s7_task3.py` (scaffold ready) · **dag_id:** `s7_task3`
+**File:** `dags/s7/s7_task3.py`  ·  **dag_id:** `s7_task3`
 
-Build a tiny plain DAG driven by params.
+Build a small **report-config** DAG driven entirely by params.
 
-**The job:**
+**The problem:**
 
-- Declare two params: `country` (string, default `"IN"`) and `limit` (integer,
-  `minimum=1`, default `10`).
-- One `@task` reads both from the context and prints a line like
-  `report for IN, top 10`.
+- Declare **three** params:
+  - `country` — string, default `"IN"`.
+  - `limit` — integer, `minimum=1`, default `10`.
+  - `env` — string restricted to `enum=["dev", "prod"]`, default `"dev"`.
+- One `@task` reads all three from the context and prints a line like
+  `report for IN, top 10, env=dev`.
 - No BigQuery, no connection.
 
-**Done when:**
+**Constraints:**
+
+- Read params via `get_current_context()["params"]`.
+- Passes the integrity gates: `tags`, real `owner`, `retries >= 1`.
+
+**Acceptance criteria:**
 
 - `python dags/s7/s7_task3.py` parses (prints nothing).
-- `airflow dags test s7_task3 2026-01-01` runs green with the defaults.
-- `airflow dags test s7_task3 2026-01-01 --conf '{"country": "US", "limit": 5}'`
-  prints `report for US, top 5`.
-- `--conf '{"limit": 0}'` is **rejected** (validation).
+- `airflow dags test s7_task3 2026-01-01` prints the line with the **defaults**.
+- `airflow dags test s7_task3 2026-01-01 --conf '{"country": "US", "limit": 5, "env": "prod"}'`
+  prints `report for US, top 5, env=prod`.
+- `--conf '{"limit": 0}'` is **rejected** (below `minimum`), and
+  `--conf '{"env": "staging"}'` is **rejected** (not in `enum`).
 - `python -m pytest tests/ -v` stays green.
 
----
-
-## 5. Production tip — validate the dial, and never put secrets on it
-
-- **Type + bounds catch a bad trigger before it wastes a run.** A `Param` with
-  `type="integer", minimum=1` rejects `limit=0` at parse of the conf, not three
-  tasks deep when a query divides by zero. Cheap guardrail, huge time saver.
-- **Params are visible — never pass a secret through one.** Param values show up in
-  the UI trigger form and the run conf. Secrets belong in a Connection or a secrets
-  backend (that's Session 15), never in a param.
+**One nudge (only if stuck):** the `enum` rule is what makes `env` reject anything
+outside your allowed list — you don't validate it yourself in Python.
 
 ---
 
-## 6. Verify + commit
+## 7. Production tip — validate the dial, and never put a secret on it
+
+- **Type + bounds turn a bad trigger into an instant, clear failure.** `Param(10,
+  type="integer", minimum=1)` rejects `limit=0` at trigger with a readable error,
+  instead of a division-by-zero five tasks later. Declare the constraint once; every
+  run is guarded for free.
+- **Params are visible — never pass a secret through one.** Param values show in the
+  UI trigger form and the run's `conf`. Secrets belong in a **Connection** or a
+  secrets backend (Session 15), never in a param.
+- **Keep conf JSON-serializable.** `--conf` is JSON — no Python objects, no datetimes
+  except as strings. If you need a date, pass a string and parse it in the task.
+
+---
+
+## 8. Verify + commit
 
 ```bash
 python dags/s7/s7_task3.py
 airflow dags test s7_task3 2026-01-01
 python -m pytest tests/ -v
-git add -A && git commit -m "session 06: params" && git push
+git add -A && git commit -m "session 07: params" && git push
 ```
 
-Done when the DAG runs on its defaults and changes behaviour from `--conf`. Then
-tick the bytes in `README.md`.
+Done when the DAG runs on its defaults and changes behaviour from `--conf`, and a
+bad value is rejected. Tick the bytes in `docs/course/README.md`.
+
+**Pre-push habit:** `ruff check dags/ include/ tests/ --select E,F,AIR3 && python -m pytest tests/ -v`
+before every push — green locally means green CI.
 
 Sources:
 [Params — Airflow 3.3](https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/params.html),

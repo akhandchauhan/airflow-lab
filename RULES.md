@@ -37,7 +37,7 @@ Hard rules for writing course notes (`docs/course/*.md`) and their reference DAG
 - **R21** — **One production tip per topic.**
 
 ## Engagement — sessions & story (why the course exists this way)
-- **R23** — **Every topic is a "Session" with a cold open.** Title = `Session NN · <memorable name>` (e.g. "Give the Pipeline a Brain"). Open with a **📟 Cold open**: a 2–4 line on-call scenario with real stakes (something broke / someone's waiting on a number), then a one-line "today's session." The concept is taught as *the fix for that scenario*, never as abstract API.
+- **R23** — **Two note styles are allowed; match the learner's current preference (currently: DIRECT).** (a) **Direct (sessions 1–3):** title `Session NN · <Topic>`, open with a one-paragraph **Goal**, then deep numbered sections — no story framing. (b) **Cold-open (sessions 4–6):** title `Session NN · <memorable name>`, open with a **📟 Cold open** (2–4 line on-call scenario), concept taught as the fix. Either way: deep on *why*, one runnable reference DAG, one build spec.
 - **R24** — **One project spine: Stack Overflow Product Health.** From Session 04 on, every reference DAG and build uses `bigquery-public-data.stackoverflow` (`posts_questions`, `posts_answers`, `users`, `tags`, `votes`) and adds a layer to the same growing pipeline. Keep the story continuous session-to-session; don't invent a fresh unrelated dataset each time. (`posts_questions.tags` is pipe-delimited; `creation_date`/`answer_count` are the workhorse columns.)
 - **R25** — **Production tips are war stories.** Frame the one production tip as "the bug that pages you at 2am," tied back to the cold open — concrete failure + the habit that prevents it. No dry checklist bullets.
 
