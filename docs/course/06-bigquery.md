@@ -292,6 +292,50 @@ git add -A && git commit -m "session 06: bigquery build" && git push
 Done when the DAG runs green and Job history shows small, capped scans. Then tick the
 bytes in `README.md`.
 
+---
+
+## 9. Deep dive — how `BigQueryCheckOperator` decides pass vs fail
+
+It runs your SQL, takes the **first row**, and casts **each value** with Python
+`bool()`. If **any** value is falsy, the task **raises `AirflowException` and fails**.
+If every value is truthy, it passes.
+
+```
+SELECT ... (one row)  →  bool(each column)  →  any False? → FAIL (raises)
+```
+
+**What's falsy → fail:**
+
+| First-row value              | `bool()` | Result   |
+| ---------------------------- | -------- | -------- |
+| `200000` (a positive count)  | `True`   | ✅ pass   |
+| `0`                          | `False`  | ❌ fail   |
+| `None` / SQL `NULL`          | `False`  | ❌ fail   |
+| `""` (empty string)          | `False`  | ❌ fail   |
+| `False`                      | `False`  | ❌ fail   |
+| any non-zero number, `"ok"`  | `True`   | ✅ pass   |
+
+**In this session's DAG** — `SELECT COUNT(*) … WHERE answer_count = 0`:
+
+- Real data → count ≈ 200000 → `bool(200000)` = `True` → **passes**.
+- Empty table → count = `0` → `bool(0)` = `False` → **fails** the task.
+
+That's the data-quality gate: fail the run when a metric is empty/zero instead of
+publishing a garbage number.
+
+**Two gotchas:**
+
+1. **Every column must be truthy** — `SELECT a, b` fails if *either* is 0. It's an
+   AND across the whole row.
+2. **Zero rows returned also fails** — an empty result set raises (`The query
+   returned None`), it does not silently pass.
+
+**Downstream:** the raise marks the task **failed** → your `retries` (Session 5) kick
+in; if it stays failed, downstream tasks skip unless they carry a trigger rule like
+`ALL_DONE`.
+
+---
+
 Sources:
 [BigQuery overview & architecture](https://docs.cloud.google.com/bigquery/docs/storage_overview),
 [BigQuery under the hood — Dremel/Colossus/Capacitor](https://cloud.google.com/blog/products/bigquery/bigquery-under-the-hood),
