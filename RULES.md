@@ -21,7 +21,7 @@ Hard rules for writing course notes (`docs/course/*.md`) and their reference DAG
 - **R11** — **Build spec = PROBLEM STATEMENT**, never a solution walkthrough. State what/constraints/acceptance; the user designs the how. Full code lives only in the reference (a different example).
 
 ## Naming
-- **R12** — Names **clearly distinct — not identical AND not scrambled twins**. Test: "would a tired reader instantly tell these apart?" Convention: `task_id` = a noun (`full_reload`); the function = a verb form (`run_full_reload`); the variable = its role (`path`, `guard`). `@task.branch` returns the **noun `task_id` string**, never the function name. `.override`/`.expand`/`.partial` are called on the **variable**.
+- **R12** — Names **clearly distinct — not identical AND not scrambled twins**. Test: "would a tired reader instantly tell these apart?" Convention: `task_id` = a noun (`full_reload`); the function = a verb form (`run_full_reload`); the variable = its role (`path`, `guard`). `@task.branch` returns the **noun `task_id` string**, never the function name. `.override`/`.expand`/`.partial` are called on the **variable**. **A local variable must NOT reuse the API keyword/dict-key it was read from** — never `params = ...["params"]`, `context = get_current_context()`-then-`context["context"]`, etc. Name it for its role (`inputs`, `cfg`, `run`), so `inputs["name"]` never collides with the literal `"params"`.
 
 ## Airflow / BigQuery
 - **R13** — **Airflow 3 only.** Public API `airflow.sdk`. Default **TaskFlow** unless the topic is classic operators. No Airflow 2 comparisons.

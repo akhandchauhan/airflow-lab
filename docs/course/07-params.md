@@ -85,8 +85,8 @@ from airflow.sdk import task, get_current_context
 
 @task
 def greet() -> None:
-    params = get_current_context()["params"]     # the whole params dict
-    print(f"hello {params['name']}")
+    inputs = get_current_context()["params"]      # the resolved param values
+    print(f"hello {inputs['name']}")
 ```
 
 ```python
@@ -160,11 +160,11 @@ def pipeline():
 
     @task
     def greet() -> None:
-        params = get_current_context()["params"]
-        message = f"hello {params['name']}"
-        if params["shout"]:
+        inputs = get_current_context()["params"]
+        message = f"hello {inputs['name']}"
+        if inputs["shout"]:
             message = message.upper()
-        for _ in range(params["times"]):
+        for _ in range(inputs["times"]):
             print(message)
 
     greet()
