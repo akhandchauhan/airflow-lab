@@ -8,10 +8,10 @@ take the points, keep the streak alive.
 
 |                    |            |
 | ------------------ | ---------- |
-| **Total points**   | 230        |
-| **Current streak** | 2 days     |
+| **Total points**   | 260        |
+| **Current streak** | 3 days     |
 | **Longest streak** | 3 days     |
-| **Last active**    | 2026-09-09 |
+| **Last active**    | 2026-09-10 |
 
 **Points:** each session ≈ **10 per concept** + **20 for its build DAG** (build counts
 when its commit is CI-green). **Streak** = consecutive days you do something. Update
@@ -32,6 +32,7 @@ don't repeat them.
 - [x] **04 · Give the Pipeline a Brain** — branching & trigger rules → [note](04-branching-trigger-rules.md) _(build skipped)_
 - [x] **05 · When a Task Falls Over** — retries → [note](05-retries.md)
 - [x] **06 · Inside the Warehouse** — BigQuery ground-up → advanced → [note](06-bigquery.md)
+- [x] **07 · Params** — input at trigger time, validation → [note](07-params.md)
 
 Reference pages (read anytime): [xcom-basics](xcom-basics.md) · [gcp-project](gcp-project.md) · [unnest](unnest.md)
 
@@ -39,7 +40,6 @@ Reference pages (read anytime): [xcom-basics](xcom-basics.md) · [gcp-project](g
 
 ## Now → next
 
-- [ ] **07 · Params** — input at trigger time; starter files in `dags/s7/` → [note](07-params.md)
 - [ ] **08 · Dynamic task mapping** — `.expand` / `.partial`, fan out at runtime → [note](08-dynamic-task-mapping.md)
 - [ ] **🔷 P2 · Parametrized dynamic load** — applies 04–08 on `ga_sessions_*` (to be written)
 
