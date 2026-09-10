@@ -45,8 +45,8 @@ _Story: the Product Health report ran on an empty table and told the VP "0 unans
 - [x] **4.3** `TriggerRule` + the 2am trap — read §3–§4 · _10_
 - [~] **4.4** ~~Build `s4_product_health`~~ — **skipped** (concepts done in 4.1–4.3)
 
-> **Current mode: slower + simpler.** Short bytes, one tiny idea each, **plain DAGs
-> — no BigQuery** for a while, until it feels easy.
+> **Current mode: slower + simpler.** Short bytes, one tiny idea each. Sessions 05
+> and 07 are plain DAGs (no BigQuery); Session 06 is a BigQuery knowledge session.
 
 ### 🎯 Session 05 · When a Task Falls Over — retries → [note](05-retries.md)
 
@@ -58,24 +58,35 @@ Starter files are ready in `dags/s5/` — just fill in the task body.
 - [x] **5.2** `retry_delay` — read §2, edit `dags/s5/s5_task2.py` · _10_
 - [x] **5.3** Build in `dags/s5/s5_task3.py` — a plain DAG that recovers, §4 · _20_
 
-### 🎯 Session 06 · Give the DAG a Dial — params → [note](06-params.md)
+### 🎯 Session 06 · Inside the Warehouse — BigQuery ground-up → advanced → [note](06-bigquery.md)
 
-_Story: the target country was hardcoded — every change meant editing the file and redeploying. A param makes it a dial anyone sets at trigger time._
+_Story: a teammate's unfiltered `SELECT *` scanned 4 TB and turned a $0 dashboard into a real bill. Learn what BigQuery actually charges for._
 
-Starter files are ready in `dags/s6/` — just fill in the task body.
+A reference session: mostly reading, one runnable DAG, one small build. Uses the P1 connection.
 
-- [ ] **6.1** Declare + read a param — read §1–§3, edit `dags/s6/s6_task1.py` · _10_
-- [ ] **6.2** Pass a value with `--conf` — read §2, edit `dags/s6/s6_task2.py` · _10_
-- [ ] **6.3** Build in `dags/s6/s6_task3.py` — two params + validation, §4 · _20_
+- [ ] **6.1** Architecture — read §1 (storage/compute, Dremel/Colossus, projects/datasets) · _10_
+- [ ] **6.2** Billing + columnar model — read §2 (bytes scanned, `SELECT *`, free tier) · _10_
+- [ ] **6.3** Partitioning + clustering — read §3 (pruning, `maximumBytesBilled`) · _10_
+- [ ] **6.4** Table types + idempotent loads — read §4 (`MERGE` / `WRITE_TRUNCATE`) · _10_
+- [ ] **6.5** Run the reference DAG — §5, `dags/s6/s6_task1.py` · _10_
+- [ ] **6.6** Build in `dags/s6/s6_task2.py` — a capped BigQuery DAG, §6 · _20_
 
-_(Jinja templating + `get_current_context` deep-dive deferred to a later session — keeping bytes tiny.)_
+### 🎯 Session 07 · Give the DAG a Dial — params → [note](07-params.md)
 
-### 07 · Dynamic task mapping (deferred from 04) → [note](07-dynamic-task-mapping.md)
+_Story: the target country was hardcoded — every change meant editing the file. A param makes it a dial anyone sets at trigger time._
 
-- [ ] **7.1** `.expand` + `.partial` — read §1–§2, run the mapped example · _10_
-- [ ] **7.2** Reduce — read §7, add the collector task · _10_
-- [ ] **7.3** `.expand_kwargs` / `.zip` / `.map` — read §4–§6 · _10_
-- [ ] **7.4** Build a mapped BigQuery DAG · _20_
+Plain DAGs (no BigQuery). Starter files in `dags/s7/`.
+
+- [ ] **7.1** Declare + read a param — read §1–§3, edit `dags/s7/s7_task1.py` · _10_
+- [ ] **7.2** Pass a value with `--conf` — read §2, edit `dags/s7/s7_task2.py` · _10_
+- [ ] **7.3** Build in `dags/s7/s7_task3.py` — two params + validation, §4 · _20_
+
+### 08 · Dynamic task mapping (deferred from 04) → [note](08-dynamic-task-mapping.md)
+
+- [ ] **8.1** `.expand` + `.partial` — read §1–§2, run the mapped example · _10_
+- [ ] **8.2** Reduce — read §7, add the collector task · _10_
+- [ ] **8.3** `.expand_kwargs` / `.zip` / `.map` — read §4–§6 · _10_
+- [ ] **8.4** Build a mapped BigQuery DAG · _20_
 
 ### 🔷 P2 · Parametrized dynamic load → practical (to be written)
 

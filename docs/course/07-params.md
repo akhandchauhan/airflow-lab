@@ -1,4 +1,4 @@
-# Session 06 · Give the DAG a Dial
+# Session 07 · Give the DAG a Dial
 
 **Params** — let someone pass a value in when they run the DAG, with no code change.
 
@@ -23,7 +23,7 @@ Add a `params` dict to `@dag`. Each entry is a name and a default (wrap it in
 from airflow.sdk import dag, Param
 
 @dag(
-    dag_id="s6_task1",
+    dag_id="s7_task1",
     params={"name": Param("world", type="string")},   # ← THE MECHANIC: one dial, default "world"
     # ... start_date, schedule, etc.
 )
@@ -52,8 +52,8 @@ def greet() -> None:
 Run it with the default, then override the dial:
 
 ```bash
-airflow dags test s6_task1 2026-01-01                          # uses default → "hello world"
-airflow dags test s6_task1 2026-01-01 --conf '{"name": "Panda"}'   # → "hello Panda"
+airflow dags test s7_task1 2026-01-01                          # uses default → "hello world"
+airflow dags test s7_task1 2026-01-01 --conf '{"name": "Panda"}'   # → "hello Panda"
 ```
 
 `--conf` is a JSON string; its values override the defaults for that run.
@@ -62,11 +62,11 @@ airflow dags test s6_task1 2026-01-01 --conf '{"name": "Panda"}'   # → "hello 
 
 ## 3. Complete runnable reference DAG (plain)
 
-Two dials — a string and a validated integer. Build this in your `s6_task1.py`
+Two dials — a string and a validated integer. Build this in your `s7_task1.py`
 scaffold and run it.
 
 ```python
-# dags/s6/s6_task1.py
+# dags/s7/s7_task1.py
 from __future__ import annotations
 
 import pendulum
@@ -74,11 +74,11 @@ from airflow.sdk import dag, task, Param, get_current_context
 
 
 @dag(
-    dag_id="s6_task1",
+    dag_id="s7_task1",
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
     schedule=None,
     catchup=False,
-    tags=["session-6", "params"],
+    tags=["session-7", "params"],
     params={
         "name": Param("world", type="string"),
         "times": Param(1, type="integer", minimum=1),   # must be >= 1
@@ -100,9 +100,9 @@ pipeline()
 ```
 
 ```bash
-python dags/s6/s6_task1.py
-airflow dags test s6_task1 2026-01-01
-airflow dags test s6_task1 2026-01-01 --conf '{"name": "Panda", "times": 3}'
+python dags/s7/s7_task1.py
+airflow dags test s7_task1 2026-01-01
+airflow dags test s7_task1 2026-01-01 --conf '{"name": "Panda", "times": 3}'
 ```
 
 The second run prints the greeting three times to "Panda". Try `--conf '{"times":
@@ -113,7 +113,7 @@ ran. That early rejection is the real value of typed params.
 
 ## 4. Your build (no solution)
 
-**File:** `dags/s6/s6_task3.py` (scaffold ready) · **dag_id:** `s6_task3`
+**File:** `dags/s7/s7_task3.py` (scaffold ready) · **dag_id:** `s7_task3`
 
 Build a tiny plain DAG driven by params.
 
@@ -127,9 +127,9 @@ Build a tiny plain DAG driven by params.
 
 **Done when:**
 
-- `python dags/s6/s6_task3.py` parses (prints nothing).
-- `airflow dags test s6_task3 2026-01-01` runs green with the defaults.
-- `airflow dags test s6_task3 2026-01-01 --conf '{"country": "US", "limit": 5}'`
+- `python dags/s7/s7_task3.py` parses (prints nothing).
+- `airflow dags test s7_task3 2026-01-01` runs green with the defaults.
+- `airflow dags test s7_task3 2026-01-01 --conf '{"country": "US", "limit": 5}'`
   prints `report for US, top 5`.
 - `--conf '{"limit": 0}'` is **rejected** (validation).
 - `python -m pytest tests/ -v` stays green.
@@ -150,8 +150,8 @@ Build a tiny plain DAG driven by params.
 ## 6. Verify + commit
 
 ```bash
-python dags/s6/s6_task3.py
-airflow dags test s6_task3 2026-01-01
+python dags/s7/s7_task3.py
+airflow dags test s7_task3 2026-01-01
 python -m pytest tests/ -v
 git add -A && git commit -m "session 06: params" && git push
 ```
