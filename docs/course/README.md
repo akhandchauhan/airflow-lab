@@ -40,7 +40,7 @@ Reference pages (read anytime): [xcom-basics](xcom-basics.md) · [gcp-project](g
 
 ## Now → next
 
-- [ ] **08 · Dynamic task mapping** — `.expand` / `.partial`, fan out at runtime → [note](08-dynamic-task-mapping.md)
+- [ ] **08 · Dynamic task mapping** — `.expand` / `.partial`, fan out at runtime; plain DAGs, files in `dags/s8/` → [note](08-dynamic-task-mapping.md)
 - [ ] **🔷 P2 · Parametrized dynamic load** — applies 04–08 on `ga_sessions_*` (to be written)
 
 ---
