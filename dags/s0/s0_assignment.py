@@ -28,7 +28,7 @@ def pipeline():
         return "Heisenberg"
 
     @task
-    def greet(name: str)->None:
+    def greet(name: str) -> None:
         print("All Hail", name)
 
     greet(get_name())

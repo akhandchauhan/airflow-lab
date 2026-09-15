@@ -9,10 +9,10 @@ This file is the **tracker**: scoreboard + what's done. ~20 minutes a day.
 
 |                    |            |
 | ------------------ | ---------- |
-| **Total points**   | 260        |
-| **Current streak** | 3 days     |
+| **Total points**   | 290        |
+| **Current streak** | 1 day      |
 | **Longest streak** | 3 days     |
-| **Last active**    | 2026-09-10 |
+| **Last active**    | 2026-09-15 |
 
 **Points:** each session ≈ **10 per concept** + **20 for its build DAG** (build counts
 when its commit is CI-green). **Streak** = consecutive days you do something. Update
@@ -26,6 +26,7 @@ don't repeat them.
 
 ## Done ✅
 
+- [x] **00 · First DAG & testing** — DAG model, `dag.test()`, integrity gates → [note](00-first-dag-testing.md)
 - [x] **01 · TaskFlow** — `@dag`/`@task`, return→XCom → [note](01-taskflow-foundations.md)
 - [x] **02 · Classic operators** — `>>`, `chain`, `cross_downstream` → [note](02-classic-operators.md)
 - [x] **03 · TaskGroups** — `@task_group`, nesting, `group_id` → [note](03-task-groups.md)
@@ -41,7 +42,6 @@ Reference pages (read anytime): [xcom-basics](xcom-basics.md) · [gcp-project](g
 
 ## Now → next
 
-- [ ] **00 · First DAG & testing** — Stage 0 foundation (dag.test, integrity gates); files in `dags/s0/` → [note](00-first-dag-testing.md)
 - [x] **08 · Dynamic task mapping** — `.expand` / `.partial`, fan out at runtime; plain DAGs, files in `dags/s8/` → [note](08-dynamic-task-mapping.md)
 - [ ] **09 · Schedules & intervals** — `schedule`, data interval, `catchup`; plain DAGs, files in `dags/s9/` → [note](09-schedules.md) · _Phase B starts_
 - [ ] **🔷 P2 · Parametrized dynamic load** — applies 04–08 on `ga_sessions_*` (to be written)
