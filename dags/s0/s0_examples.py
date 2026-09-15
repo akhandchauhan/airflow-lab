@@ -23,10 +23,14 @@ from airflow.sdk import dag, task
 def pipeline():
     # TODO: say_hello() returns a string; show(msg) prints it; wire show(say_hello())
     @task
-    def todo() -> None:
-        print("replace me")
+    def say_hello() -> str:
+        return "Hola Amigos, Salamanca Brothers"
 
-    todo()
+    @task
+    def show(msg: str) -> None:
+        print(msg)
+
+    show(say_hello())
 
 
 pipeline()
