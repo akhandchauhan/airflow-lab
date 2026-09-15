@@ -4,8 +4,8 @@ Boilerplate is ready. Build what the note (§6) asks:
   - one task returns your name; one task prints a greeting using it
   - wire them by passing the value (no >>)
 Then run:
-    airflow dags test s0_assignment 2026-01-01
-    python -m pytest tests/ -v
+   airflow dags test s0_assignment 2026-01-01
+    python -m pytest tests/ -v 
 """
 from __future__ import annotations
 
@@ -24,10 +24,14 @@ from airflow.sdk import dag, task
 def pipeline():
     # TODO: get_name() -> greet(name); wire greet(get_name())
     @task
-    def todo() -> None:
-        print("replace me")
+    def get_name() -> str:
+        return "Heisenberg"
 
-    todo()
+    @task
+    def greet(name: str)->None:
+        print("All Hail", name)
+
+    greet(get_name())
 
 
 pipeline()
