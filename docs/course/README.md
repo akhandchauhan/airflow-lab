@@ -35,12 +35,13 @@ don't repeat them.
 - [x] **06 · Inside the Warehouse** — BigQuery ground-up → advanced → [note](06-bigquery.md)
 - [x] **07 · Params** — input at trigger time, validation → [note](07-params.md)
 
-Reference pages (read anytime): [xcom-basics](xcom-basics.md) · [gcp-project](gcp-project.md) · [unnest](unnest.md)
+Reference pages (read anytime): [xcom-basics](xcom-basics.md) · [gcp-project](gcp-project.md) · [unnest](unnest.md) · [stage1-recap](stage1-recap.md)
 
 ---
 
 ## Now → next
 
+- [ ] **00 · First DAG & testing** — Stage 0 foundation (dag.test, integrity gates); files in `dags/s0/` → [note](00-first-dag-testing.md)
 - [x] **08 · Dynamic task mapping** — `.expand` / `.partial`, fan out at runtime; plain DAGs, files in `dags/s8/` → [note](08-dynamic-task-mapping.md)
 - [ ] **09 · Schedules & intervals** — `schedule`, data interval, `catchup`; plain DAGs, files in `dags/s9/` → [note](09-schedules.md) · _Phase B starts_
 - [ ] **🔷 P2 · Parametrized dynamic load** — applies 04–08 on `ga_sessions_*` (to be written)

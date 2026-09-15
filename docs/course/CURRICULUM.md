@@ -29,8 +29,7 @@ can see what it's doing.
 
 | Topic | What you learn | Status |
 |---|---|---|
-| Orchestration & Airflow basics | what a DAG / task / scheduler / run is; the task lifecycle; the UI | covered inside 01 ✅ |
-| Your first DAG + **testing it** | `dag.test()`, parsing, the integrity tests that gate every commit | ⬜ (fold into a short primer) |
+| **00 · First DAG & testing** → [note](00-first-dag-testing.md) | DAG/task/run model, the smallest DAG, and proving it works 3 ways: parse, `airflow dags test`, integrity gates | ✅ |
 
 **Why first:** you can't build on a black box. You learn to *run, watch, and test* a
 DAG before you write a real one.
@@ -48,6 +47,10 @@ DAG before you write a real one.
 | 03 | **TaskGroups** | keep a growing DAG readable | ✅ |
 | 05 | **Retries** | a flaky network call shouldn't page you | ✅ |
 | 07 | **Params** | run the same DAG with different inputs | ✅ |
+| recap | **Jinja templating** — `{{ ds }}` / `{{ params.x }}` in operator fields | templated SQL/bash without Python → [recap §6](stage1-recap.md) | ✅ |
+
+📄 **All of Stage 1 in one file:** [stage1-recap.md](stage1-recap.md) — TaskFlow,
+operators, TaskGroups, retries, params, with copy-runnable code.
 
 **Milestone:** StackPulse can build, wire, and re-run a basic pipeline by hand.
 
