@@ -242,6 +242,61 @@ value from yesterday's.
 Why care: a downstream task can depend on *just* `path` without dragging the
 whole payload through, and each value is separately inspectable in the UI.
 
+### 5a. What breaks if you drop BOTH `multiple_outputs` and `-> dict`
+
+Say you write `extract` with neither the flag nor the annotation, but still wire it
+with `data["path"]`:
+
+```python
+@task
+def extract():                    # no -> dict, no multiple_outputs → multiple_outputs=False
+    return {"path": "gs://...", "rows": 4213}
+
+data = extract()
+load(transform(path=data["path"], rows=data["rows"]))
+```
+
+**It still runs — and silently produces `None`.** Here's why:
+
+- With `multiple_outputs=False` the dict is stored as **one** XCom named `return_value`.
+- `data["path"]` on an `XComArg` means *"pull the XCom **named** `path`"* — **not**
+  "index into the dict". That key was never pushed → `xcom_pull` returns `None`.
+- So `transform` runs with `path=None, rows=None` and prints `transforming None rows
+  from None`. Green run, wrong data — the dangerous kind of bug.
+
+(`-> dict` matters because Airflow **auto-infers `multiple_outputs=True` from a dict
+return annotation** — so the annotation alone is enough; setting the flag explicitly
+just disables that inference and uses your value.)
+
+### 5b. The workaround — pass the whole dict, index in Python
+
+If you don't unroll, don't subscript the `XComArg`. Hand the whole return downstream
+and index it with normal Python **inside** the task:
+
+```python
+@task
+def extract():
+    return {"path": "gs://...", "rows": 4213}
+
+@task
+def transform(data: dict) -> int:            # receives the whole dict (one XCom)
+    print(f"transforming {data['rows']} rows from {data['path']}")
+    return data["rows"]
+
+load(transform(extract()))                   # pass the blob; no ["path"] on the XComArg
+```
+
+So there are two valid styles — just don't mix them:
+
+| Style | XCom shape | Wire it as |
+|---|---|---|
+| `multiple_outputs=True` / `-> dict` | one XCom **per key** | `data["path"]` (subscript the XComArg) |
+| plain (neither) | one `return_value` blob | pass the whole dict, `data["path"]` **inside** the task |
+
+The silent-`None` trap is "no unroll" + subscripting the XComArg. That's the whole
+reason these two methods exist: they turn *one XCom holding a dict* into *separate
+named XComs you can subscript at wiring time*.
+
 ---
 
 ## 6. API + example (every line, knowing what it means)
