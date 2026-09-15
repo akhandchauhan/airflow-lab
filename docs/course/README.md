@@ -1,8 +1,9 @@
 # Airflow 3 — Daily Bytes
 
-Apache Airflow **3.3**. Learn it in **~20 minutes a day, every day**. Each item
-below is a **byte**: one small chunk you finish in one sitting. Do a byte, tick it,
-take the points, keep the streak alive.
+Apache Airflow **3.3**, learned the way a company actually adopts it — prove it works,
+build basic DAGs, put them on a clock, react to data, connect the warehouse, trust it,
+scale it. **The full path & the *why* of the order live in [CURRICULUM.md](CURRICULUM.md).**
+This file is the **tracker**: scoreboard + what's done. ~20 minutes a day.
 
 ## Scoreboard
 
@@ -40,35 +41,17 @@ Reference pages (read anytime): [xcom-basics](xcom-basics.md) · [gcp-project](g
 
 ## Now → next
 
-- [ ] **08 · Dynamic task mapping** — `.expand` / `.partial`, fan out at runtime; plain DAGs, files in `dags/s8/` → [note](08-dynamic-task-mapping.md)
-- [ ] **09 · Schedules & intervals** — `schedule`, data interval, `catchup`; plain DAGs, files in `dags/s9/` → [note](09-schedules.md) · *Phase B starts*
+- [x] **08 · Dynamic task mapping** — `.expand` / `.partial`, fan out at runtime; plain DAGs, files in `dags/s8/` → [note](08-dynamic-task-mapping.md)
+- [ ] **09 · Schedules & intervals** — `schedule`, data interval, `catchup`; plain DAGs, files in `dags/s9/` → [note](09-schedules.md) · _Phase B starts_
 - [ ] **🔷 P2 · Parametrized dynamic load** — applies 04–08 on `ga_sessions_*` (to be written)
 
 ---
 
-## The road ahead (each topic → ~3–4 bytes, broken out when you reach it)
+## The road ahead
 
-**Phase B — Scheduling & data-awareness:** 07 Schedules & intervals · 08 Timetables ·
-09 Backfill · 🔷 P3 Incremental daily + backfill · 10 Assets · 11 Asset logic ·
-12 Event-driven · 🔷 P4 Asset-driven BQ pipeline
-
-**Phase C — Data passing, connections, sensors:** 13 XCom deep · 14 XCom backend +
-ObjectStorage · [15 Connections + Hooks](15-hooks.md) · 🔷 P5 BQ→GCS ·
-16 Variables + Secrets · 17 Sensors · 18 Deferrable + Triggerer ·
-🔷 P6 Secrets + deferrable sensor
-
-**Phase D — Isolation, containers, cross-DAG:** 19 Dependency isolation · 20 Container
-tasks · 21 Cross-DAG · 🔷 P7 Isolated transform + cross-DAG · 22 Setup/teardown
-
-**Phase E — Architecture & scaling:** 23 Architecture · 24 Executors · 25 Concurrency
-hierarchy · 🔷 P8 Fan-out + concurrency · 26 Parsing performance · 27 DAG versioning ·
-28 Reliability · 🔷 P9 Hardening the BQ pipeline
-
-**Phase F — Operations & production quality:** 29 Alerting · 30 Observability ·
-31 Data quality · 🔷 P10 Alerting + self-checks · 32 Testing + CI/CD · 33 dbt via
-Cosmos · 34 Warehouse push-down ELT · 🔷 P11 DQ gate + dbt on BigQuery
-
-**Phase G — Capstone:** 35 Multi-tenancy · 🔶 36 Capstone (the full BigQuery pipeline)
+The full staged plan — Stage 0 (does it work?) → 1 basic DAGs → 2 cron → 3 assets →
+4 warehouse & brains → 5 quality & alerting → 6 scale & harden → capstone — lives in
+**[CURRICULUM.md](CURRICULUM.md)**, with the business reason for each stage.
 
 ## 🎬 The project: Stack Overflow Product Health
 
