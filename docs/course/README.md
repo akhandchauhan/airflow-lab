@@ -2,7 +2,7 @@
 
 Apache Airflow **3.3**, learned the way a company actually adopts it — prove it works,
 build basic DAGs, put them on a clock, react to data, connect the warehouse, trust it,
-scale it. **The full path & the *why* of the order live in [CURRICULUM.md](CURRICULUM.md).**
+scale it. **The full path & the _why_ of the order live in [CURRICULUM.md](CURRICULUM.md).**
 This file is the **tracker**: scoreboard + what's done. ~20 minutes a day.
 
 ## Scoreboard
@@ -43,7 +43,8 @@ Reference pages (read anytime): [xcom-basics](xcom-basics.md) · [gcp-project](g
 ## Now → next
 
 - [x] **08 · Dynamic task mapping** — `.expand` / `.partial`, fan out at runtime; plain DAGs, files in `dags/s8/` → [note](08-dynamic-task-mapping.md)
-- [ ] **09 · Schedules & intervals** — `schedule`, data interval, `catchup`; plain DAGs, files in `dags/s9/` → [note](09-schedules.md) · _Phase B starts_
+- [x] **09 · Schedules & intervals** — `schedule`, data interval, `catchup`; plain DAGs, files in `dags/s9/` → [note](09-schedules.md) · _Phase B starts_
+- [ ] **12 · Assets (data-aware scheduling)** — react to data, not the clock; end-to-end; files in `dags/s12/` → [note](12-assets.md) · _Stage 3_
 - [ ] **🔷 P2 · Parametrized dynamic load** — applies 04–08 on `ga_sessions_*` (to be written)
 
 ---

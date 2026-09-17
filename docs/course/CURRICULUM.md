@@ -79,7 +79,7 @@ that fire **when the data is actually ready**.
 
 | Session | Topic | Why | Status |
 |---|---|---|---|
-| 12 | **Assets & data-aware scheduling** — `Asset`, `outlets`, `schedule=[asset]` | run the report the moment the table updates | ⬜ |
+| 12 | **Assets & data-aware scheduling** (end-to-end) → [note](12-assets.md) | run the report the moment the table updates | 🟡 |
 | 13 | **Asset logic** — `AssetAll` / `AssetAny`, aliases | run only when *several* inputs are ready | ⬜ |
 | 14 | **Event-driven** — watchers, message queues | trigger from outside events, not just Airflow | ⬜ |
 
