@@ -1,12 +1,12 @@
 # Session 02 · Classic Operators & Dependency Helpers
 
-**Goal:** build a DAG the *classic* way - instantiate operator objects and wire
+**Goal:** build a DAG the _classic_ way - instantiate operator objects and wire
 them explicitly - and understand what an Operator actually is, how `>>` builds
 edges, and when `chain`, `chain_linear`, and `cross_downstream` beat writing
 arrows by hand.
 
-Session 01 wired the graph *implicitly* through data (TaskFlow). This session
-wires it *explicitly* through operators. Same DAG concept, opposite mechanism.
+Session 01 wired the graph _implicitly_ through data (TaskFlow). This session
+wires it _explicitly_ through operators. Same DAG concept, opposite mechanism.
 
 ---
 
@@ -23,11 +23,11 @@ many operator classes; each knows how to do one kind of thing:
 
 Three words that are easy to confuse - keep them straight:
 
-| Term | What it is | Example |
-|---|---|---|
-| **Operator** | the class (template) | `BashOperator` |
-| **Task** | one *instance* of an operator inside a DAG | `copy_file = BashOperator(...)` |
-| **Task Instance** | one *run* of that task for a specific DAG run | `copy_file` on 2026-01-01 |
+| Term              | What it is                                    | Example                         |
+| ----------------- | --------------------------------------------- | ------------------------------- |
+| **Operator**      | the class (template)                          | `BashOperator`                  |
+| **Task**          | one _instance_ of an operator inside a DAG    | `copy_file = BashOperator(...)` |
+| **Task Instance** | one _run_ of that task for a specific DAG run | `copy_file` on 2026-01-01       |
 
 So: instantiate an **Operator** -> you get a **Task** (a node in the DAG). When
 the DAG runs, that task becomes a **Task Instance** (see Session 01's parse-time
@@ -42,26 +42,22 @@ copy_file = BashOperator(          # instantiating the operator class...
 )
 ```
 
-`BashOperator` lives in `apache-airflow-providers-standard` - in Airflow 3 the
-basic operators moved out of core into the `standard` provider. Import path:
-`airflow.providers.standard.operators.<bash|python|empty>`.
-
 ---
 
 ## 2. `BaseOperator` - the parent of every operator
 
 Every operator class inherits from **`BaseOperator`** (`from airflow.sdk import
-BaseOperator`). That is where the arguments common to *all* tasks come from -
+BaseOperator`). That is where the arguments common to _all_ tasks come from -
 you can pass these to any operator:
 
-| Arg | Meaning |
-|---|---|
-| `task_id` | unique name within the DAG (required) |
-| `retries`, `retry_delay` | retry-on-failure behavior |
-| `trigger_rule` | when this task runs relative to upstream (Session 04) |
-| `pool`, `priority_weight` | concurrency control (Session 13) |
-| `execution_timeout` | kill the task if it runs too long |
-| `depends_on_past` | only run if the previous run's same task succeeded |
+| Arg                       | Meaning                                               |
+| ------------------------- | ----------------------------------------------------- |
+| `task_id`                 | unique name within the DAG (required)                 |
+| `retries`, `retry_delay`  | retry-on-failure behavior                             |
+| `trigger_rule`            | when this task runs relative to upstream (Session 04) |
+| `pool`, `priority_weight` | concurrency control (Session 13)                      |
+| `execution_timeout`       | kill the task if it runs too long                     |
+| `depends_on_past`         | only run if the previous run's same task succeeded    |
 
 `default_args` on the DAG is just a dict of these that Airflow applies to every
 operator in the DAG - which is why setting `retries` there covers all tasks.
@@ -101,6 +97,13 @@ XCom's job. This is the key contrast with TaskFlow: there, passing a value drew
 the edge for you; here, you draw the edge yourself and move data separately (via
 XCom) if needed.
 
+> **Scenario — pull three endpoints, then merge.** The Stack Overflow load hits
+> three independent API endpoints (questions, answers, users) that can run at the
+> same time, and a merge step that needs all three. `extract >> [get_questions,
+> get_answers, get_users] >> merge`: one line fans out to three parallel pulls and
+> fans them back into `merge`. Reach for bare `>>` when the shape is this simple and
+> reads fine at a glance.
+
 ---
 
 ## 4. `chain()` - wire many tasks without a wall of arrows
@@ -126,6 +129,33 @@ A scalar next to a list "broadcasts" to every element; two lists pair up
 position-by-position. If the lists differ in length, `chain` raises an error -
 that is your signal you wanted `cross_downstream` instead.
 
+> **Scenario — two independent lanes, one setup, one publish.** The health report
+> processes **questions** and **answers** as two separate pipelines that must never
+> cross: `transform_questions` reads *only* `extract_questions`. One prep step at the
+> front, one publish at the end.
+>
+> ```python
+> chain(
+>     create_staging,                            # one setup for the whole run
+>     [extract_questions, extract_answers],      # two extracts start in parallel
+>     [transform_questions, transform_answers],  # each transforms ITS OWN extract
+>     publish_health_report,                      # waits for BOTH lanes
+> )
+> ```
+>
+> ```
+>               ┌─ extract_questions ── transform_questions ─┐
+> create_staging┤                                            ├─ publish_health_report
+>               └─ extract_answers ──── transform_answers ───┘
+> ```
+>
+> The element-wise pairing is the whole point: it wires `extract_questions →
+> transform_questions` and `extract_answers → transform_answers`, and **never**
+> `extract_answers → transform_questions`. A cross there would be a bug (the answers
+> extract blocking the questions transform). `publish_health_report` has both
+> transforms upstream, so with the default `all_success` rule it runs **only when both
+> lanes finish** — you never ship a half-built report.
+
 ---
 
 ## 5. `cross_downstream()` - every-to-every between two groups
@@ -142,6 +172,14 @@ Use it when a set of upstream tasks must all complete before any of a set of
 downstream tasks. Note: `cross_downstream` returns `None` - you cannot keep
 chaining off it, so it is usually a standalone statement.
 
+> **Scenario — every mart reads every source.** Two raw loads (`load_questions`,
+> `load_answers`) must both land before **any** downstream mart builds — and each mart
+> reads **both** sources: `build_engagement_mart` joins questions+answers,
+> `build_quality_mart` joins questions+answers too. `cross_downstream([load_questions,
+> load_answers], [build_engagement_mart, build_quality_mart])` wires all four edges so
+> neither mart starts until both loads are done. Use the cross (not `chain`'s zip) when
+> the downstream tasks genuinely depend on *all* the upstream ones, not one each.
+
 ---
 
 ## 6. `chain_linear()` - cross product across many groups, chainable
@@ -157,10 +195,18 @@ chain_linear([a, b], [c, d], [e])
 # c >> e ; d >> e                        (group2 x group3)
 ```
 
+> **Scenario — a layered warehouse where each layer needs the whole layer below.**
+> Two source loads → two staging models (each reads both sources) → one mart (reads
+> both staging models): `chain_linear([load_questions, load_answers], [stage_posts,
+> stage_users], [build_mart])`. Every boundary is a full cross, and there are three
+> layers — more than `cross_downstream`'s two — so `chain_linear` expresses the whole
+> stack in one call. This is the shape of a typical Bronze→Silver→Gold ELT.
+
 Rule of thumb:
-- **`chain`** - element-wise pairing between equal-length lists.
+
+- **`chain`** - element-wise pairing between equal-length lists (independent lanes).
 - **`cross_downstream`** - full cross product, exactly two groups, terminal.
-- **`chain_linear`** - full cross product, any number of groups.
+- **`chain_linear`** - full cross product, any number of groups (layered stack).
 
 ---
 
@@ -180,12 +226,19 @@ start >> [job_a, job_b, job_c] >> end
 
 Without `end`, you'd draw three edges into whatever came next; with it, one.
 
+> **Scenario — one join point for the alert.** The nightly report runs five parallel
+> checks, and you want a single Slack alert *after the whole run finishes*, wired once.
+> Hang the notify off one `end = EmptyOperator(...)`: `[check1, ..., check5] >> end >>
+> notify` — `notify` has one upstream instead of five, and `end` is the one node that
+> means "the run is done." Same trick as a `start` anchor: a clean place for everything
+> to fan out from or fan in to, without doing any work itself.
+
 ---
 
 ## 8. Classic vs TaskFlow - the full difference
 
 Both build the **same thing** - a DAG of tasks with dependencies. They differ in
-*how you express it*. The two styles are two syntaxes over one engine, not two
+_how you express it_. The two styles are two syntaxes over one engine, not two
 engines.
 
 ### Side by side - the same pipeline in both styles
@@ -216,21 +269,21 @@ with `>>`, and pass data manually (`op_kwargs` / XCom).
 
 ### What actually differs
 
-| Aspect | TaskFlow (`@task` / `@dag`) | Classic (operators + `>>`) |
-|---|---|---|
-| **A task is** | a decorated Python function | an operator instance (`PythonOperator(...)`) |
-| **Dependencies** | implicit - passing a return value draws the edge | explicit - you write `>>` / `chain` |
-| **Data passing** | automatic - return value is auto-pushed, argument auto-pulls | manual - `op_kwargs`, `xcom_pull`, templates |
-| **XCom** | hidden behind function calls | you call `ti.xcom_push` / `xcom_pull` yourself |
-| **DAG registration** | must **call** the `@dag` function | `dag = DAG(...)` exists at import |
-| **What it reads like** | function composition | a wiring diagram |
-| **Boilerplate** | low | higher (task_id, callable, wiring all explicit) |
-| **Non-Python work** | limited - Python callables | natural - `BashOperator`, `KubernetesPodOperator`, SQL operators |
+| Aspect                 | TaskFlow (`@task` / `@dag`)                                  | Classic (operators + `>>`)                                       |
+| ---------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------- |
+| **A task is**          | a decorated Python function                                  | an operator instance (`PythonOperator(...)`)                     |
+| **Dependencies**       | implicit - passing a return value draws the edge             | explicit - you write `>>` / `chain`                              |
+| **Data passing**       | automatic - return value is auto-pushed, argument auto-pulls | manual - `op_kwargs`, `xcom_pull`, templates                     |
+| **XCom**               | hidden behind function calls                                 | you call `ti.xcom_push` / `xcom_pull` yourself                   |
+| **DAG registration**   | must **call** the `@dag` function                            | `dag = DAG(...)` exists at import                                |
+| **What it reads like** | function composition                                         | a wiring diagram                                                 |
+| **Boilerplate**        | low                                                          | higher (task_id, callable, wiring all explicit)                  |
+| **Non-Python work**    | limited - Python callables                                   | natural - `BashOperator`, `KubernetesPodOperator`, SQL operators |
 
 ### The mechanism difference in one line
 
-- **TaskFlow:** *a data dependency IS the task dependency.* You move data; the edge appears.
-- **Classic:** *edges and data are separate.* You draw the edge with `>>`; if data must flow, you push/pull it via XCom yourself.
+- **TaskFlow:** _a data dependency IS the task dependency._ You move data; the edge appears.
+- **Classic:** _edges and data are separate._ You draw the edge with `>>`; if data must flow, you push/pull it via XCom yourself.
 
 ### Which to use
 
@@ -314,6 +367,7 @@ Use `EmptyOperator` for every task (no real work - this is about wiring).
 extract --> +--> validate_nulls  --+ --> load --> notify
             +--> validate_ranges --+
 ```
+
 `extract` runs, then all three `validate_*` run in parallel, then `load` after
 all three succeed, then `notify`.
 
@@ -326,14 +380,17 @@ file, but give the tasks distinct `task_id`s per version, e.g. suffix `_a`,
 3. **Version C - `cross_downstream` + `chain`.** Use `cross_downstream` for the extract->validators->load cross-wiring, and `chain` for the `load >> notify` tail.
 
 **The thinking part:**
+
 - In Version B, work out where the middle list goes and why `chain(extract, [v1,v2,v3], load, notify)` gives you the fan-out AND fan-in for free.
 - In Version C, notice `cross_downstream` can't be chained - you'll need it as its own statement, then wire `load >> notify` separately.
 
 **Constraints:**
+
 - All tasks are `EmptyOperator`.
 - Every DAG-level gate must pass: `tags`, real `owner`, `retries >= 1` via `default_args`.
 
 **Acceptance criteria:**
+
 - `python dags/s2/classic_operators.py` parses cleanly.
 - In the UI Graph, all three versions show the identical diamond shape (fan-out to 3, fan-in to load, then notify).
 - `airflow dags test s2_classic_operators 2026-01-01` runs everything green.
