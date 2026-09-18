@@ -97,12 +97,7 @@ XCom's job. This is the key contrast with TaskFlow: there, passing a value drew
 the edge for you; here, you draw the edge yourself and move data separately (via
 XCom) if needed.
 
-> **Scenario — pull three endpoints, then merge.** The Stack Overflow load hits
-> three independent API endpoints (questions, answers, users) that can run at the
-> same time, and a merge step that needs all three. `extract >> [get_questions,
-> get_answers, get_users] >> merge`: one line fans out to three parallel pulls and
-> fans them back into `merge`. Reach for bare `>>` when the shape is this simple and
-> reads fine at a glance.
+> **Scenario — pull three endpoints, then merge.** The Stack Overflow load hits three independent API endpoints (questions, answers, users) that can run at the same time, and a merge step that needs all three. `extract >> [get_questions, get_answers, get_users] >> merge`: one line fans out to three parallel pulls and fans them back into `merge`. Reach for bare `>>` when the shape is this simple and reads fine at a glance.
 
 ---
 
@@ -129,10 +124,7 @@ A scalar next to a list "broadcasts" to every element; two lists pair up
 position-by-position. If the lists differ in length, `chain` raises an error -
 that is your signal you wanted `cross_downstream` instead.
 
-> **Scenario — two independent lanes, one setup, one publish.** The health report
-> processes **questions** and **answers** as two separate pipelines that must never
-> cross: `transform_questions` reads *only* `extract_questions`. One prep step at the
-> front, one publish at the end.
+> **Scenario — two independent lanes, one setup, one publish.** The health report processes **questions** and **answers** as two separate pipelines that must never cross: `transform_questions` reads *only* `extract_questions`. One prep step at the front, one publish at the end.
 >
 > ```python
 > chain(
@@ -149,12 +141,7 @@ that is your signal you wanted `cross_downstream` instead.
 >               └─ extract_answers ──── transform_answers ───┘
 > ```
 >
-> The element-wise pairing is the whole point: it wires `extract_questions →
-> transform_questions` and `extract_answers → transform_answers`, and **never**
-> `extract_answers → transform_questions`. A cross there would be a bug (the answers
-> extract blocking the questions transform). `publish_health_report` has both
-> transforms upstream, so with the default `all_success` rule it runs **only when both
-> lanes finish** — you never ship a half-built report.
+> The element-wise pairing is the whole point: it wires `extract_questions → transform_questions` and `extract_answers → transform_answers`, and **never** `extract_answers → transform_questions`. A cross there would be a bug (the answers extract blocking the questions transform). `publish_health_report` has both transforms upstream, so with the default `all_success` rule it runs **only when both lanes finish** — you never ship a half-built report.
 
 ---
 
@@ -172,13 +159,7 @@ Use it when a set of upstream tasks must all complete before any of a set of
 downstream tasks. Note: `cross_downstream` returns `None` - you cannot keep
 chaining off it, so it is usually a standalone statement.
 
-> **Scenario — every mart reads every source.** Two raw loads (`load_questions`,
-> `load_answers`) must both land before **any** downstream mart builds — and each mart
-> reads **both** sources: `build_engagement_mart` joins questions+answers,
-> `build_quality_mart` joins questions+answers too. `cross_downstream([load_questions,
-> load_answers], [build_engagement_mart, build_quality_mart])` wires all four edges so
-> neither mart starts until both loads are done. Use the cross (not `chain`'s zip) when
-> the downstream tasks genuinely depend on *all* the upstream ones, not one each.
+> **Scenario — every mart reads every source.** Two raw loads (`load_questions`, `load_answers`) must both land before **any** downstream mart builds — and each mart reads **both** sources: `build_engagement_mart` joins questions+answers, `build_quality_mart` joins questions+answers too. `cross_downstream([load_questions, load_answers], [build_engagement_mart, build_quality_mart])` wires all four edges so neither mart starts until both loads are done. Use the cross (not `chain`'s zip) when the downstream tasks genuinely depend on *all* the upstream ones, not one each.
 
 ---
 
@@ -195,12 +176,7 @@ chain_linear([a, b], [c, d], [e])
 # c >> e ; d >> e                        (group2 x group3)
 ```
 
-> **Scenario — a layered warehouse where each layer needs the whole layer below.**
-> Two source loads → two staging models (each reads both sources) → one mart (reads
-> both staging models): `chain_linear([load_questions, load_answers], [stage_posts,
-> stage_users], [build_mart])`. Every boundary is a full cross, and there are three
-> layers — more than `cross_downstream`'s two — so `chain_linear` expresses the whole
-> stack in one call. This is the shape of a typical Bronze→Silver→Gold ELT.
+> **Scenario — a layered warehouse where each layer needs the whole layer below.** Two source loads → two staging models (each reads both sources) → one mart (reads both staging models): `chain_linear([load_questions, load_answers], [stage_posts, stage_users], [build_mart])`. Every boundary is a full cross, and there are three layers — more than `cross_downstream`'s two — so `chain_linear` expresses the whole stack in one call. This is the shape of a typical Bronze→Silver→Gold ELT.
 
 Rule of thumb:
 
@@ -226,12 +202,7 @@ start >> [job_a, job_b, job_c] >> end
 
 Without `end`, you'd draw three edges into whatever came next; with it, one.
 
-> **Scenario — one join point for the alert.** The nightly report runs five parallel
-> checks, and you want a single Slack alert *after the whole run finishes*, wired once.
-> Hang the notify off one `end = EmptyOperator(...)`: `[check1, ..., check5] >> end >>
-> notify` — `notify` has one upstream instead of five, and `end` is the one node that
-> means "the run is done." Same trick as a `start` anchor: a clean place for everything
-> to fan out from or fan in to, without doing any work itself.
+> **Scenario — one join point for the alert.** The nightly report runs five parallel checks, and you want a single Slack alert *after the whole run finishes*, wired once. Hang the notify off one `end = EmptyOperator(...)`: `[check1, ..., check5] >> end >> notify` — `notify` has one upstream instead of five, and `end` is the one node that means "the run is done." Same trick as a `start` anchor: a clean place for everything to fan out from or fan in to, without doing any work itself.
 
 ---
 
