@@ -387,6 +387,49 @@ DAG in isolation, so trigger the producer through the scheduler/UI to watch the 
 fire, or `airflow dags test s12_consumer 2026-01-01` to test its body alone. And make
 sure `s12_consumer` is **unpaused** — a paused consumer ignores the event, §5.)
 
+### Splitting producer and consumer across files (the real-world layout)
+
+Above, both DAGs live in one file. In practice the producer and consumer are **separate files** — often owned by different teams. The split works because the two DAGs connect by the asset's `uri` (§2), not by sharing a file. **Define the asset once and import it into both** — one Python object, one URI, no chance of a typo drifting them apart:
+
+```python
+# dags/s12/assets.py  ← define the asset ONCE, in a shared module
+from airflow.sdk import Asset
+
+questions = Asset(uri="file:///data/questions.csv", name="questions")
+```
+
+```python
+# dags/s12/producer.py
+from airflow.sdk import dag, task
+from s12.assets import questions           # ← same object, imported
+
+@dag(dag_id="s12_producer", schedule="@daily", ...)
+def producer():
+    @task(outlets=[questions])             # produces it
+    def load_questions() -> None:
+        print("loaded")
+    load_questions()
+
+producer()
+```
+
+```python
+# dags/s12/consumer.py
+from airflow.sdk import dag, task
+from s12.assets import questions           # ← the very same object
+
+@dag(dag_id="s12_consumer", schedule=[questions], ...)   # consumes it
+def consumer():
+    @task
+    def build() -> None:
+        print("questions is fresh → building report")
+    build()
+
+consumer()
+```
+
+Nothing else changes: both files sit under `dags/` (Airflow parses subfolders recursively), the **Assets** view shows the same producer→asset→consumer chain, and the consumer still must be **unpaused** to catch events. Importing the shared `Asset` is the safe default — it makes the URI impossible to mistype in one place and not the other (the silent-break trap from §2, where a one-character URI difference gives you two *different* assets and a consumer that waits forever).
+
 ---
 
 ## 9. Build spec — your challenge (no solution)
