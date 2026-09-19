@@ -3,28 +3,28 @@
 **Goal:** stop scheduling on a **clock that hopes** the data is ready, and start
 running when the job that produces the data **actually finished**. The one idea to get
 right: an asset is **not** the data and Airflow does **not** watch your files or tables
-— an asset is a *name*, and a producer task raising a "done" signal against that name
+— an asset is a _name_, and a producer task raising a "done" signal against that name
 is what triggers the consumer. Get that, and the rest (conditional scheduling,
-metadata, aliases, event-driven) is detail. Plain DAGs, no BigQuery. *(Stage 3 — react
-to data, not the clock.)*
+metadata, aliases, event-driven) is detail. Plain DAGs, no BigQuery. _(Stage 3 — react
+to data, not the clock.)_
 
 ---
 
 ## 1. Why we needed assets
 
 Everything before this session scheduled on **time**. That has a hole: a `@daily`
-report runs at midnight and just *hopes* last night's load finished. When the load is
+report runs at midnight and just _hopes_ last night's load finished. When the load is
 late, the report runs on stale or empty data — the exact 2am incident from Session 04.
 
 The pre-asset fixes, and why each one hurts:
 
-| Approach | What it does | The pain |
-|---|---|---|
-| **Pad the schedule** | run the report "late enough" (03:00 not 00:00) | guesswork; still breaks when the load is *later*; wasted hours |
-| **Sensor** (`ExternalTaskSensor`, `FileSensor`) | the consumer *polls* until upstream is done | burns a worker slot polling; couples DAGs by task id; brittle |
-| **`TriggerDagRunOperator`** | producer *imperatively* kicks the consumer | producer must know every consumer; hard-codes the fan-out; deps point the wrong way |
+| Approach                                        | What it does                                   | The pain                                                                            |
+| ----------------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------- |
+| **Pad the schedule**                            | run the report "late enough" (03:00 not 00:00) | guesswork; still breaks when the load is _later_; wasted hours                      |
+| **Sensor** (`ExternalTaskSensor`, `FileSensor`) | the consumer _polls_ until upstream is done    | burns a worker slot polling; couples DAGs by task id; brittle                       |
+| **`TriggerDagRunOperator`**                     | producer _imperatively_ kicks the consumer     | producer must know every consumer; hard-codes the fan-out; deps point the wrong way |
 
-Notice the shape of all three: the consumer is forced to know *when* or *who*. An asset
+Notice the shape of all three: the consumer is forced to know _when_ or _who_. An asset
 removes both questions. The consumer declares **what data** it depends on; the producer
 declares **what data** it makes. Neither names the other's DAG. Airflow connects them.
 
@@ -65,21 +65,19 @@ An **Asset** is a **name for a piece of data** plus a **ledger of "done" events*
 Airflow's metadata DB. That's it. It is emphatically **not** the file or table, and
 Airflow never opens it.
 
-> **The rule that makes everything else make sense:** Airflow does not monitor your
-> data. It monitors **whether a task succeeded**. When a task that lists an asset in its
-> `outlets` finishes successfully, Airflow writes one row — an *asset event* — and any
+> **The rule that makes everything else make sense:** Airflow does not monitor your data. It monitors **whether a task succeeded**. When a task that lists an asset in its `outlets` finishes successfully, Airflow writes one row — an _asset event_ — and any
 > DAG scheduled on that asset runs. The bytes on disk are irrelevant to the trigger.
 
 **Back to the doorbell.** The producer rings the bell when it finishes; the consumer is
 whoever's listening for it. You react to **the ring**, not to walking over and checking
 who's at the door. Two consequences fall straight out of that, and both bite people:
 
-- The ring tells you *someone finished a delivery* — not *what they brought*. An asset
+- The ring tells you _someone finished a delivery_ — not _what they brought_. An asset
   event means the task **succeeded**, not that the data is non-empty or correct. (§10 is
   how you make the ring mean more.)
 - If you're **out** (the consumer DAG is **paused**), rings that happen while you're
   gone are **missed** — you come home to silence, not a pile of "you missed 3 rings"
-  notes. It waits for the *next* ring.
+  notes. It waits for the _next_ ring.
 
 ```python
 from airflow.sdk import Asset
@@ -93,6 +91,27 @@ questions = Asset(uri="file:///data/questions.csv", name="questions")
 - Define the asset **once** in a shared module and import it into both the producer and
   the consumer — same Python object, same identity.
 
+### What `uri` really means
+
+The `uri` is just a **unique name — a label string**. Airflow never opens, reads, watches, or validates whatever is at `file:///data/questions.csv`; nothing checks the file even exists. What it actually does:
+
+- **It's the asset's identity.** Airflow wires a producer to a consumer by comparing URI *strings*. `outlets=[Asset(uri="file:///data/questions.csv")]` and `schedule=[Asset(uri="file:///data/questions.csv")]` connect **because the strings are equal** — not because they point at the same real file.
+- **Same `uri` = same asset.** Two `Asset(...)` objects with the same URI are one node in the metadata DB, even if defined in different files with different `name`s.
+- **`name` is only the pretty label**; `uri` is the canonical key underneath.
+
+What it does **not** do:
+
+| You might think | Reality |
+|---|---|
+| Airflow reads that CSV | No — it never touches it |
+| The event means the file changed | No — it means the producing task **succeeded** (§2, the doorbell rang) |
+| `file://` makes Airflow watch the filesystem | No — the scheme is decoration; nothing polls it |
+| A wrong path breaks the asset | No — any unique string works; correctness is on you |
+
+**Then why shape it like a path?** Convention, not function. `file:///data/questions.csv` or `bigquery://proj/dataset/questions` is a **human-readable, collision-proof name** — it documents *what data this represents* and won't clash with another team's asset. `Asset(uri="x-questions-daily", name="questions")` would behave identically; the path form just makes intent obvious and uniqueness easy.
+
+> **The rule:** `uri` is a name Airflow **compares as a string**, not a location it accesses. Producer and consumer connect when their URIs match — that's the whole mechanism. (Caveat: the `airflow://` scheme is reserved; for a custom scheme, prefix it `x-`.)
+
 ---
 
 ## 3. Three verbs: outlets, inlets, schedule
@@ -100,14 +119,14 @@ questions = Asset(uri="file:///data/questions.csv", name="questions")
 Assets attach to tasks and DAGs in exactly three places. Keeping them straight removes
 most confusion:
 
-| Where | On | Meaning | Affects scheduling? |
-|---|---|---|---|
-| `outlets=[asset]` | a **task** | "this task **produces** the asset" → success writes an event | **Yes** — triggers consumers |
-| `schedule=[asset]` | a **DAG** | "**run this DAG** when the asset gets an event" | **Yes** — this *is* the trigger |
-| `inlets=[asset]` | a **task** | "this task wants to **read** the event's metadata" | **No** — read-only access |
+| Where              | On         | Meaning                                                      | Affects scheduling?             |
+| ------------------ | ---------- | ------------------------------------------------------------ | ------------------------------- |
+| `outlets=[asset]`  | a **task** | "this task **produces** the asset" → success writes an event | **Yes** — triggers consumers    |
+| `schedule=[asset]` | a **DAG**  | "**run this DAG** when the asset gets an event"              | **Yes** — this _is_ the trigger |
+| `inlets=[asset]`   | a **task** | "this task wants to **read** the event's metadata"           | **No** — read-only access       |
 
 The common mistake: expecting `inlets` to schedule something. It doesn't. `inlets` only
-lets a task *see* what came in (`inlet_events`); the trigger is `schedule` + `outlets`.
+lets a task _see_ what came in (`inlet_events`); the trigger is `schedule` + `outlets`.
 
 ---
 
@@ -174,13 +193,13 @@ def build(**context) -> None:
 **The paused-DAG trap, spelled out:** asset events only count toward a consumer's
 schedule **while it is unpaused**. Pause the report for maintenance, let three loads run
 past, unpause — it does **not** fire three times to catch up. It starts fresh and waits
-for the *next* event. (This is why backfilling history stays a time-based job.)
+for the _next_ event. (This is why backfilling history stays a time-based job.)
 
 ---
 
 ## 6. Conditional scheduling — waiting on several assets
 
-Real reports need *several* inputs ready. Combine assets with boolean operators:
+Real reports need _several_ inputs ready. Combine assets with boolean operators:
 
 ```python
 @dag(schedule=(questions & answers), ...)   # AssetAll — run when BOTH have an event
@@ -204,7 +223,7 @@ once both landed — never early, never on a padded timer.
 Once the basics click, four features cover the hard cases:
 
 **a) Metadata on an event** — make the ring mean more than "something happened"; tell
-consumers *what* changed (row counts, a path):
+consumers _what_ changed (row counts, a path):
 
 ```python
 from airflow.sdk import Metadata
@@ -308,7 +327,7 @@ sure `s12_consumer` is **unpaused** — a paused consumer ignores the event, §5
 
 ## 9. Build spec — your challenge (no solution)
 
-**File:** `dags/s12/s12_assignment.py`  ·  **dag_ids:** `s12_prod_a`, `s12_prod_b`, `s12_mart`
+**File:** `dags/s12/s12_assignment.py` · **dag_ids:** `s12_prod_a`, `s12_prod_b`, `s12_mart`
 
 Build a **two-input mart** that runs only when both sources are fresh.
 
@@ -336,7 +355,7 @@ Build a **two-input mart** that runs only when both sources are fresh.
 - `python -m pytest tests/ -v` stays green.
 
 **One nudge (only if stuck):** `&` combines the two assets into an `AssetAll` condition
-— you pass the *expression* `(orders & refunds)` straight to `schedule=`, you don't
+— you pass the _expression_ `(orders & refunds)` straight to `schedule=`, you don't
 write any waiting logic yourself.
 
 ---
@@ -344,16 +363,16 @@ write any waiting logic yourself.
 ## 10. Production tip — the ring says "done," not "good"
 
 The bug that pages you at 2am: the loader task hit an empty upstream, wrote **zero
-rows**, and *succeeded*. Success wrote the asset event, the event triggered the mart,
+rows**, and _succeeded_. Success wrote the asset event, the event triggered the mart,
 and the mart cheerfully published an empty dashboard. Assets did exactly what they
 promise — and that's the trap: **an asset event means the task succeeded, not that the
 data is any good** (§2, the ring says a delivery happened, not what's inside).
 
 - **Make the ring mean more.** Producers stamp `extra={"row_count": n}`; the consumer
   reads it from `triggering_asset_events` and short-circuits on `0`. That turns "the
-  table changed" into "the table changed *and* has rows."
+  table changed" into "the table changed _and_ has rows."
 - **Only real completion should ring the bell.** Put `outlets` on the task that means
-  the data is *complete and validated*, never a "mostly worked" early step.
+  the data is _complete and validated_, never a "mostly worked" early step.
 - **Treat the name/URI as a public API.** Other teams schedule on it; renaming it
   silently breaks every downstream. Pick it once, keep it stable.
 
