@@ -228,6 +228,10 @@ The basics (§2–6) are: one producer rings one bell, consumers listen. Four fe
 
 **The fix:** the producer attaches an `extra` dict (any JSON-serializable values) to the event. Same idea as taping a note to the door: "delivered — 4213 rows."
 
+There are **two ways to attach that note — pick ONE**, depending on how you wrote the producer (§4). They do the *same thing*; you never write both.
+
+**Option A — you used the `@asset` decorator:** `yield` a `Metadata` object.
+
 ```python
 from airflow.sdk import Metadata, asset
 
@@ -236,12 +240,15 @@ def questions(self):
     yield Metadata(self, {"row_count": 4213})        # ← the note taped to the ring
 ```
 
+**Option B — you used a plain `@task`:** write to the `outlet_events` accessor.
+
 ```python
-# the @task form — write to the same accessor, no decorator magic:
 @task(outlets=[questions])
 def load_questions(**context) -> None:
     context["outlet_events"][questions].extra = {"row_count": 4213}
 ```
+
+Both end with the identical note — `{"row_count": 4213}` — on the identical event. It's one feature with two spellings (like `Ctrl+S` vs File→Save), matching the two producer styles from §4.
 
 **The consumer reads it back** off the triggering event and acts on it:
 
