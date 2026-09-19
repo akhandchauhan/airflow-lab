@@ -220,42 +220,106 @@ once both landed — never early, never on a padded timer.
 
 ## 7. The advanced ladder
 
-Once the basics click, four features cover the hard cases:
+The basics (§2–6) are: one producer rings one bell, consumers listen. Four features handle the cases that breaks on. Each rung below is **a problem the plain model can't solve → the feature that does.** Read them as "you'll reach for this when…", not as API to memorize.
 
-**a) Metadata on an event** — make the ring mean more than "something happened"; tell
-consumers _what_ changed (row counts, a path):
+### a) Metadata — make the ring carry a message
+
+**The problem:** the doorbell ring means "the task succeeded," full stop (§2). It can't tell the consumer *how many rows* landed or *where* the file went — so the consumer can't skip an empty load or find the output. The ring has no payload.
+
+**The fix:** the producer attaches an `extra` dict (any JSON-serializable values) to the event. Same idea as taping a note to the door: "delivered — 4213 rows."
 
 ```python
-from airflow.sdk import Metadata
+from airflow.sdk import Metadata, asset
 
 @asset(schedule=None)
 def questions(self):
-    yield Metadata(self, {"row_count": 4213})       # attach extra (JSON-serializable)
-# or inside a @task:  context["outlet_events"][questions].extra = {"row_count": 4213}
+    yield Metadata(self, {"row_count": 4213})        # ← the note taped to the ring
 ```
-
-Consumers read it from `triggering_asset_events` — e.g. skip the run if `row_count == 0`.
-
-**b) `AssetAlias`** — the concrete asset isn't known until runtime (a dynamic path):
 
 ```python
-from airflow.sdk import AssetAlias
-
-@task(outlets=[AssetAlias("daily-exports")])
-def export(*, outlet_events) -> None:
-    path = compute_path()                           # decided at run time
-    outlet_events[AssetAlias("daily-exports")].add(Asset(f"file://{path}"))
+# the @task form — write to the same accessor, no decorator magic:
+@task(outlets=[questions])
+def load_questions(**context) -> None:
+    context["outlet_events"][questions].extra = {"row_count": 4213}
 ```
 
-Consumers schedule on the **alias**; whatever concrete asset the run resolves to
-triggers them.
+**The consumer reads it back** off the triggering event and acts on it:
 
-**c) `@asset.multi`** — one task that updates several assets at once.
+```python
+@task
+def build(**context) -> None:
+    for asset, events in context["triggering_asset_events"].items():
+        rows = events[-1].extra["row_count"]         # newest event's note
+        if rows == 0:
+            return                                   # empty load → don't publish
+```
 
-**d) Event-driven watchers** — the flag is raised by something **outside** Airflow (a
-queue message), via `AssetWatcher`. Recall §2: normally Airflow only knows about events
-from **tasks, the REST API, or the UI** — a watcher is how you bridge a real external
-system. That's Session 14; just know it exists.
+`triggering_asset_events[asset]` is a **list of past events, oldest→newest**, so `[-1]` is the one that just fired. This is exactly the §10 war story fix: turn "something happened" into "something happened *and here's what*."
+
+### b) `AssetAlias` — when you don't know the asset's name until runtime
+
+**The problem:** you can only write `Asset(uri="…")` at **parse time**, but sometimes the real identity is decided at **run time** — the export path includes today's date (`.../2026-09-19.parquet`), or which table you wrote depends on the input. You can't hard-code a URI you don't know yet. But consumers still need to depend on "whatever today's export turned out to be."
+
+**The fix:** declare a **stable alias name** now; at run time the producer resolves it to a concrete `Asset` and attaches it. The alias is a permanent doorbell whose *wiring* is decided each run.
+
+```python
+from airflow.sdk import Asset, AssetAlias, task
+
+@task(outlets=[AssetAlias("daily-export")])          # ← stable name, unknown target
+def export(*, outlet_events) -> None:
+    path = f"s3://bucket/{today}.parquet"            # decided at run time
+    outlet_events[AssetAlias("daily-export")].add(   # bind the alias to the real asset
+        Asset(path), extra={"path": path},
+    )
+```
+
+**The consumer** schedules or `inlets` on the **alias**, and gets whatever concrete asset the run resolved to:
+
+```python
+@task(inlets=[AssetAlias("daily-export")])
+def load(*, inlet_events) -> None:
+    latest = inlet_events[AssetAlias("daily-export")][-1]
+    print(latest.extra["path"])                      # the path this run actually wrote
+```
+
+### c) `@asset.multi` — one job, several assets
+
+**The problem:** one task genuinely produces **several** datasets in one go — it splits a raw feed into `questions` and `answers`, and both should ring when it finishes. Writing two separate `@asset` DAGs would run the split twice.
+
+**The fix:** `@asset.multi` — one function, one DAG, lists **all** the assets it updates in `outlets`. On success every one of them gets an event.
+
+```python
+from airflow.sdk import Asset, asset
+
+questions = Asset("questions")
+answers = Asset("answers")
+
+@asset.multi(schedule=None, outlets=[questions, answers])   # ← updates BOTH on success
+def split_feed():
+    ...                                                     # one run rings both bells
+```
+
+### d) Event-driven watchers — the ring comes from outside Airflow
+
+**The problem:** the trigger isn't another Airflow task at all — it's a **message on a queue** (SQS, Kafka), or a file landing in a bucket. Recall §2: Airflow only learns of events from **tasks, the REST API, or the UI** — it can't see a queue on its own.
+
+**The fix:** an `AssetWatcher` attached to an asset listens to that external source and turns each incoming message into an asset event — so a queue message becomes a doorbell ring your DAGs can schedule on. This is the deep end (full setup, triggers, message queues) and gets its own session.
+
+```python
+# shape only — full treatment in Session 14
+from airflow.sdk import Asset, AssetWatcher
+
+incoming = Asset("x-orders-queue", watchers=[AssetWatcher(name="sqs", trigger=...)])
+```
+
+### The ladder at a glance
+
+| Rung | Reach for it when… | Key API |
+|---|---|---|
+| **Metadata** | the consumer needs *what changed*, not just *that it changed* | `Metadata(self, {...})` / `outlet_events[a].extra` |
+| **AssetAlias** | the asset's URI is only known at run time | `AssetAlias("name")` + `outlet_events[alias].add(Asset(...))` |
+| **@asset.multi** | one job produces several datasets at once | `@asset.multi(outlets=[a, b])` |
+| **AssetWatcher** | the trigger is an external event (queue/message), not a task | `Asset(..., watchers=[AssetWatcher(...)])` → Session 14 |
 
 ---
 
