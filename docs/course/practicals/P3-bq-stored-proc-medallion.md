@@ -83,3 +83,9 @@ Each must be **idempotent** — re-running produces the same result, never dupli
 - The SQL function that **splits** a delimited string into an array.
 
 Done when the call-chain runs green, the gate blocks gold on empty bronze, and a re-run is idempotent. Tick P3 in `docs/course/README.md`.
+
+---
+
+## ✅ Verified
+
+All acceptance criteria confirmed: `raw → bronze → gate → gold` runs green end to end; a re-run leaves row counts unchanged (idempotent); forcing `bronze.questions_clean` empty (via a DDL-only `CREATE OR REPLACE TABLE ... AS SELECT ... WHERE FALSE`, since Sandbox blocks `TRUNCATE`) made `dq_gate` fail and `gold_marts` show **skipped**, proving the circuit breaker actually fires, not just that it's unreached.
