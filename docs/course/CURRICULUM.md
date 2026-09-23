@@ -82,6 +82,7 @@ Legend: ✅ done · 🟡 written & ready, not finished yet.
 | 13 | **BigQuery ground-up → advanced** → [note](stage-4-warehouse/13-bigquery.md) | the warehouse: cost, partitioning, idempotent loads | ✅ |
 | 14 | **Branching & trigger rules** → [note](stage-4-warehouse/14-branching-trigger-rules.md) | pipelines that choose a path and survive skips | ✅ |
 | 15 | **Dynamic task mapping** → [note](stage-4-warehouse/15-dynamic-task-mapping.md) | fan out over N files/regions decided at run time | ✅ |
+| 24 | **XCom backends & ObjectStorage** → [note](stage-4-warehouse/24-xcom-backends-objectstorage.md) | pass large data by reference, keep it out of the metadata DB | 🟡 |
 
 **Milestone:** StackPulse runs real cost-capped BigQuery ELT that branches and scales.
 
@@ -112,6 +113,13 @@ Legend: ✅ done · 🟡 written & ready, not finished yet.
 | 21 | **Executors & concurrency** — pools, priority → [note](stage-6-scale/21-executors-concurrency.md) | keep 100 DAGs from trampling each other | 🟡 |
 | 22 | **DAG versioning & CI/CD** → [note](stage-6-scale/22-dag-versioning-cicd.md) | ship safely; every run pinned to its code | 🟡 |
 | 23 | **dbt via Cosmos, push-down ELT** → [note](stage-6-scale/23-dbt-cosmos.md) | integrate the modern transform layer | 🟡 |
+| 25 | **Cross-DAG dependencies** → [note](stage-6-scale/25-cross-dag-dependencies.md) | connect DAGs: `TriggerDagRunOperator`, `ExternalTaskSensor`, or assets | 🟡 |
+| 26 | **Setup & teardown** → [note](stage-6-scale/26-setup-teardown.md) | spin up a resource and always tear it down, even on failure | 🟡 |
+| 27 | **Reliability & deadlines** → [note](stage-6-scale/27-reliability-deadlines.md) | timeouts, backoff, Deadline Alerts, `depends_on_past` | 🟡 |
+| 28 | **Dependency isolation** → [note](stage-6-scale/28-dependency-isolation.md) | run a task in its own venv/interpreter to end version fights | 🟡 |
+| 29 | **Container tasks** → [note](stage-6-scale/29-container-tasks.md) | run a task as a Docker container or Kubernetes pod | 🟡 |
+| 30 | **Parsing performance** → [note](stage-6-scale/30-parsing-performance.md) | keep top-level code cheap; tune the DAG processor & scheduler | 🟡 |
+| 31 | **Multi-tenancy** → [note](stage-6-scale/31-multi-tenancy.md) | many teams on one Airflow: bundles, RBAC, queues | 🟡 |
 
 **Milestone:** the platform survives real load, real teams, and real deploys.
 

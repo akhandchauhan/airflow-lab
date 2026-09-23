@@ -47,6 +47,7 @@ Legend: `[x]` = done · `[ ]` = written & ready, not finished yet.
 - [x] **13 · BigQuery** — ground-up → advanced, cost-capped → [note](stage-4-warehouse/13-bigquery.md)
 - [x] **14 · Branching & trigger rules** — choose a path, survive skips → [note](stage-4-warehouse/14-branching-trigger-rules.md) _(build skipped)_
 - [x] **15 · Dynamic task mapping** — `.expand`/`.partial`, fan out at runtime → [note](stage-4-warehouse/15-dynamic-task-mapping.md)
+- [ ] **24 · XCom backends & ObjectStorage** — pass large data by reference, not through the DB → [note](stage-4-warehouse/24-xcom-backends-objectstorage.md)
 
 ### Stage 5 · Trust it, get paged — `stage-5-quality/`
 - [ ] **16 · Data quality** — SQL checks, circuit breaker → [note](stage-5-quality/16-data-quality.md)
@@ -59,6 +60,13 @@ Legend: `[x]` = done · `[ ]` = written & ready, not finished yet.
 - [ ] **21 · Executors & concurrency** — pools, priority → [note](stage-6-scale/21-executors-concurrency.md)
 - [ ] **22 · DAG versioning & CI/CD** — ship safely, pin each run → [note](stage-6-scale/22-dag-versioning-cicd.md)
 - [ ] **23 · dbt via Cosmos** — the modern transform layer → [note](stage-6-scale/23-dbt-cosmos.md)
+- [ ] **25 · Cross-DAG dependencies** — `TriggerDagRunOperator`, `ExternalTaskSensor`, vs assets → [note](stage-6-scale/25-cross-dag-dependencies.md)
+- [ ] **26 · Setup & teardown** — `@setup`/`@teardown`, always-clean-up → [note](stage-6-scale/26-setup-teardown.md)
+- [ ] **27 · Reliability & deadlines** — timeouts, backoff, Deadline Alerts, `depends_on_past` → [note](stage-6-scale/27-reliability-deadlines.md)
+- [ ] **28 · Dependency isolation** — `PythonVirtualenvOperator`, `ExternalPythonOperator` → [note](stage-6-scale/28-dependency-isolation.md)
+- [ ] **29 · Container tasks** — `DockerOperator`, `KubernetesPodOperator` → [note](stage-6-scale/29-container-tasks.md)
+- [ ] **30 · Parsing performance** — top-level-code trap, scheduler tuning, HA → [note](stage-6-scale/30-parsing-performance.md)
+- [ ] **31 · Multi-tenancy** — teams, RBAC/auth managers, queues → [note](stage-6-scale/31-multi-tenancy.md)
 
 ### Capstone — `capstone/`
 - [ ] **Capstone · The StackPulse platform** — wire every layer into one pipeline → [note](capstone/capstone.md)
