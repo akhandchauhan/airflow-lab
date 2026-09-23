@@ -95,7 +95,21 @@ Why you should care:
 ## 5. DAG bundles & serialized DAGs
 
 - **DAG bundle** = the storage the DAG Processor reads from. Default is a **local folder**; **versioned backends like Git** are supported. With a versioned bundle, the **scheduler pins a specific bundle version when it dispatches each task**, so a task always runs against the code version its run started with (this is what DAG versioning in Session 22 builds on).
-- **Serialized DAG** = the parsed DAG stored as JSON in the DB (`serialized_dag` table). The scheduler, API server, and triggerer all read *this*, never the raw `.py`. That's why a syntax error in a DAG shows up in the **DAG Processor** logs, not the scheduler.
+- **Serialized DAG** = your DAG object turned into **JSON** and stored in the DB (`serialized_dag` table). "Serialize" is the ordinary idea — convert an in-memory object into a storable format (like `json.dumps`) — done once by the DAG Processor so no other service has to re-run your `.py`. The scheduler, API server, and triggerer all read *this JSON*, never the raw file. That's why a syntax error shows up in the **DAG Processor** logs (not the scheduler), and why a **code change only takes effect once the processor re-serializes it** — until then everyone reads the old JSON (this is what Session 22's DAG versioning builds on).
+
+  A DAG like `extract >> load` serializes to roughly:
+  ```json
+  {
+    "dag_id": "etl",
+    "schedule": "@daily",
+    "tasks": [
+      {"task_id": "extract", "operator": "PythonOperator"},
+      {"task_id": "load",    "operator": "PythonOperator"}
+    ],
+    "edges": [["extract", "load"]]
+  }
+  ```
+  It captures the **shape** — task ids, operator types, dependencies, schedule, params, `default_args`, tags — but **not the body of your `@task` functions**. That code isn't stored; when a task finally runs, the **worker** reads the real file from the bundle and executes it. The serialized JSON is the blueprint; the worker running your Python is the crew building it.
 
 ---
 
