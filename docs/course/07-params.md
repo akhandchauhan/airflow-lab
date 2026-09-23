@@ -1,7 +1,7 @@
 # Session 07 · Params
 
 **Goal:** make a DAG take **input at trigger time** instead of hardcoding values —
-understand that a Param is a *declared, validated input with a default*, where the
+understand that a Param is a _declared, validated input with a default_, where the
 declaration is read at **parse time** and the actual value is bound at **run time**
 from the DAG run's `conf`. Plain DAGs, no BigQuery.
 
@@ -23,17 +23,17 @@ PARSE TIME                          RUN TIME (a triggered run)
     when the file is parsed           → exposed in the task context as params["name"]
 ```
 
-- At **parse time** Airflow reads the `params={...}` dict — the *shape* of the input.
+- At **parse time** Airflow reads the `params={...}` dict — the _shape_ of the input.
 - At **run time** the concrete values come from the run's **`conf`**, merged over the
   defaults, validated, and handed to tasks as `context["params"]`.
 
 What it is **NOT**:
 
-| Not this | Because |
-|---|---|
-| a **Variable** | Variables are global, stored in the metadata DB, shared across *all* DAGs; a Param is scoped to **one DAG run**, set at trigger |
-| an **XCom** | XCom passes data **task → task** during a run; a Param is input **into** the run, from outside |
-| an env var / config | Params are per-run and validated; config is static and global |
+| Not this            | Because                                                                                                                         |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| a **Variable**      | Variables are global, stored in the metadata DB, shared across _all_ DAGs; a Param is scoped to **one DAG run**, set at trigger |
+| an **XCom**         | XCom passes data **task → task** during a run; a Param is input **into** the run, from outside                                  |
+| an env var / config | Params are per-run and validated; config is static and global                                                                   |
 
 Reach for a Param when the same DAG should run with different inputs — a date range, a
 country, a batch size, a dry-run flag — without editing code.
@@ -62,12 +62,12 @@ def pipeline():
 - `Param(default, ...)` — the **first argument is the default**.
 - Validation is **JSON-Schema** under the hood. The ones you'll actually use:
 
-| Rule | Example | Meaning |
-|---|---|---|
-| `type` | `type="integer"` | `"string"`, `"integer"`, `"number"`, `"boolean"`, `"array"`, `"object"` |
-| `minimum` / `maximum` | `minimum=1, maximum=10` | numeric bounds |
-| `enum` | `enum=["dev", "prod"]` | value must be one of these |
-| `minLength` / `maxLength` | `minLength=2` | string length bounds |
+| Rule                      | Example                 | Meaning                                                                 |
+| ------------------------- | ----------------------- | ----------------------------------------------------------------------- |
+| `type`                    | `type="integer"`        | `"string"`, `"integer"`, `"number"`, `"boolean"`, `"array"`, `"object"` |
+| `minimum` / `maximum`     | `minimum=1, maximum=10` | numeric bounds                                                          |
+| `enum`                    | `enum=["dev", "prod"]`  | value must be one of these                                              |
+| `minLength` / `maxLength` | `minLength=2`           | string length bounds                                                    |
 
 - **Allowing null:** a typed Param rejects `None`. To allow it, use a list type:
   `Param(None, type=["null", "string"])`.
@@ -109,12 +109,12 @@ BashOperator(task_id="echo", bash_command="echo {{ params.name }}")
 
 Four ways to set params on a run; all override the defaults:
 
-| How | Command / place |
-|---|---|
+| How                            | Command / place                                             |
+| ------------------------------ | ----------------------------------------------------------- |
 | **CLI test** (what you'll use) | `airflow dags test <dag> <date> --conf '{"name": "Panda"}'` |
-| **CLI trigger** (scheduler) | `airflow dags trigger <dag> --conf '{"name": "Panda"}'` |
-| **UI** | the **Trigger DAG** form — edit params, then run |
-| **From another DAG** | `TriggerDagRunOperator(..., conf={"name": "Panda"})` |
+| **CLI trigger** (scheduler)    | `airflow dags trigger <dag> --conf '{"name": "Panda"}'`     |
+| **UI**                         | the **Trigger DAG** form — edit params, then run            |
+| **From another DAG**           | `TriggerDagRunOperator(..., conf={"name": "Panda"})`        |
 
 `--conf` is a **JSON string**. Its values override the defaults for that one run, then
 validation runs — a value that breaks a rule **rejects the run before any task
@@ -195,7 +195,7 @@ tasks deep.
 
 ## 6. Build spec — your challenge (no solution)
 
-**File:** `dags/s7/s7_task3.py`  ·  **dag_id:** `s7_task3`
+**File:** `dags/s7/s7_task3.py` · **dag_id:** `s7_task3`
 
 Build a small **report-config** DAG driven entirely by params.
 
@@ -207,7 +207,6 @@ Build a small **report-config** DAG driven entirely by params.
   - `env` — string restricted to `enum=["dev", "prod"]`, default `"dev"`.
 - One `@task` reads all three from the context and prints a line like
   `report for IN, top 10, env=dev`.
-- No BigQuery, no connection.
 
 **Constraints:**
 
@@ -232,7 +231,7 @@ outside your allowed list — you don't validate it yourself in Python.
 ## 7. Production tip — validate the dial, and never put a secret on it
 
 - **Type + bounds turn a bad trigger into an instant, clear failure.** `Param(10,
-  type="integer", minimum=1)` rejects `limit=0` at trigger with a readable error,
+type="integer", minimum=1)` rejects `limit=0` at trigger with a readable error,
   instead of a division-by-zero five tasks later. Declare the constraint once; every
   run is guarded for free.
 - **Params are visible — never pass a secret through one.** Param values show in the

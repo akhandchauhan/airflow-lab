@@ -95,20 +95,20 @@ questions = Asset(uri="file:///data/questions.csv", name="questions")
 
 The `uri` is just a **unique name — a label string**. Airflow never opens, reads, watches, or validates whatever is at `file:///data/questions.csv`; nothing checks the file even exists. What it actually does:
 
-- **It's the asset's identity.** Airflow wires a producer to a consumer by comparing URI *strings*. `outlets=[Asset(uri="file:///data/questions.csv")]` and `schedule=[Asset(uri="file:///data/questions.csv")]` connect **because the strings are equal** — not because they point at the same real file.
+- **It's the asset's identity.** Airflow wires a producer to a consumer by comparing URI _strings_. `outlets=[Asset(uri="file:///data/questions.csv")]` and `schedule=[Asset(uri="file:///data/questions.csv")]` connect **because the strings are equal** — not because they point at the same real file.
 - **Same `uri` = same asset.** Two `Asset(...)` objects with the same URI are one node in the metadata DB, even if defined in different files with different `name`s.
 - **`name` is only the pretty label**; `uri` is the canonical key underneath.
 
 What it does **not** do:
 
-| You might think | Reality |
-|---|---|
-| Airflow reads that CSV | No — it never touches it |
-| The event means the file changed | No — it means the producing task **succeeded** (§2, the doorbell rang) |
-| `file://` makes Airflow watch the filesystem | No — the scheme is decoration; nothing polls it |
-| A wrong path breaks the asset | No — any unique string works; correctness is on you |
+| You might think                              | Reality                                                                |
+| -------------------------------------------- | ---------------------------------------------------------------------- |
+| Airflow reads that CSV                       | No — it never touches it                                               |
+| The event means the file changed             | No — it means the producing task **succeeded** (§2, the doorbell rang) |
+| `file://` makes Airflow watch the filesystem | No — the scheme is decoration; nothing polls it                        |
+| A wrong path breaks the asset                | No — any unique string works; correctness is on you                    |
 
-**Then why shape it like a path?** Convention, not function. `file:///data/questions.csv` or `bigquery://proj/dataset/questions` is a **human-readable, collision-proof name** — it documents *what data this represents* and won't clash with another team's asset. `Asset(uri="x-questions-daily", name="questions")` would behave identically; the path form just makes intent obvious and uniqueness easy.
+**Then why shape it like a path?** Convention, not function. `file:///data/questions.csv` or `bigquery://proj/dataset/questions` is a **human-readable, collision-proof name** — it documents _what data this represents_ and won't clash with another team's asset. `Asset(uri="x-questions-daily", name="questions")` would behave identically; the path form just makes intent obvious and uniqueness easy.
 
 > **The rule:** `uri` is a name Airflow **compares as a string**, not a location it accesses. Producer and consumer connect when their URIs match — that's the whole mechanism. (Caveat: the `airflow://` scheme is reserved; for a custom scheme, prefix it `x-`.)
 
@@ -224,11 +224,11 @@ The basics (§2–6) are: one producer rings one bell, consumers listen. Four fe
 
 ### a) Metadata — make the ring carry a message
 
-**The problem:** the doorbell ring means "the task succeeded," full stop (§2). It can't tell the consumer *how many rows* landed or *where* the file went — so the consumer can't skip an empty load or find the output. The ring has no payload.
+**The problem:** the doorbell ring means "the task succeeded," full stop (§2). It can't tell the consumer _how many rows_ landed or _where_ the file went — so the consumer can't skip an empty load or find the output. The ring has no payload.
 
 **The fix:** the producer attaches an `extra` dict (any JSON-serializable values) to the event. Same idea as taping a note to the door: "delivered — 4213 rows."
 
-There are **two ways to attach that note — pick ONE**, depending on how you wrote the producer (§4). They do the *same thing*; you never write both.
+There are **two ways to attach that note — pick ONE**, depending on how you wrote the producer (§4). They do the _same thing_; you never write both.
 
 **Option A — you used the `@asset` decorator:** `yield` a `Metadata` object.
 
@@ -261,13 +261,13 @@ def build(**context) -> None:
             return                                   # empty load → don't publish
 ```
 
-`triggering_asset_events[asset]` is a **list of past events, oldest→newest**, so `[-1]` is the one that just fired. This is exactly the §10 war story fix: turn "something happened" into "something happened *and here's what*."
+`triggering_asset_events[asset]` is a **list of past events, oldest→newest**, so `[-1]` is the one that just fired. This is exactly the §10 war story fix: turn "something happened" into "something happened _and here's what_."
 
 ### b) `AssetAlias` — when you don't know the asset's name until runtime
 
 **The problem:** you can only write `Asset(uri="…")` at **parse time**, but sometimes the real identity is decided at **run time** — the export path includes today's date (`.../2026-09-19.parquet`), or which table you wrote depends on the input. You can't hard-code a URI you don't know yet. But consumers still need to depend on "whatever today's export turned out to be."
 
-**The fix:** declare a **stable alias name** now; at run time the producer resolves it to a concrete `Asset` and attaches it. The alias is a permanent doorbell whose *wiring* is decided each run.
+**The fix:** declare a **stable alias name** now; at run time the producer resolves it to a concrete `Asset` and attaches it. The alias is a permanent doorbell whose _wiring_ is decided each run.
 
 ```python
 from airflow.sdk import Asset, AssetAlias, task
@@ -321,12 +321,12 @@ incoming = Asset("x-orders-queue", watchers=[AssetWatcher(name="sqs", trigger=..
 
 ### The ladder at a glance
 
-| Rung | Reach for it when… | Key API |
-|---|---|---|
-| **Metadata** | the consumer needs *what changed*, not just *that it changed* | `Metadata(self, {...})` / `outlet_events[a].extra` |
-| **AssetAlias** | the asset's URI is only known at run time | `AssetAlias("name")` + `outlet_events[alias].add(Asset(...))` |
-| **@asset.multi** | one job produces several datasets at once | `@asset.multi(outlets=[a, b])` |
-| **AssetWatcher** | the trigger is an external event (queue/message), not a task | `Asset(..., watchers=[AssetWatcher(...)])` → Session 14 |
+| Rung             | Reach for it when…                                            | Key API                                                       |
+| ---------------- | ------------------------------------------------------------- | ------------------------------------------------------------- |
+| **Metadata**     | the consumer needs _what changed_, not just _that it changed_ | `Metadata(self, {...})` / `outlet_events[a].extra`            |
+| **AssetAlias**   | the asset's URI is only known at run time                     | `AssetAlias("name")` + `outlet_events[alias].add(Asset(...))` |
+| **@asset.multi** | one job produces several datasets at once                     | `@asset.multi(outlets=[a, b])`                                |
+| **AssetWatcher** | the trigger is an external event (queue/message), not a task  | `Asset(..., watchers=[AssetWatcher(...)])` → Session 14       |
 
 ---
 
@@ -393,49 +393,6 @@ its own — check the **Assets** view in the UI to see the event. (`dags test` r
 DAG in isolation, so trigger the producer through the scheduler/UI to watch the consumer
 fire, or `airflow dags test s12_consumer 2026-01-01` to test its body alone. And make
 sure `s12_consumer` is **unpaused** — a paused consumer ignores the event, §5.)
-
-### Splitting producer and consumer across files (the real-world layout)
-
-Above, both DAGs live in one file. In practice the producer and consumer are **separate files** — often owned by different teams. The split works because the two DAGs connect by the asset's `uri` (§2), not by sharing a file. **Define the asset once and import it into both** — one Python object, one URI, no chance of a typo drifting them apart:
-
-```python
-# dags/s12/assets.py  ← define the asset ONCE, in a shared module
-from airflow.sdk import Asset
-
-questions = Asset(uri="file:///data/questions.csv", name="questions")
-```
-
-```python
-# dags/s12/producer.py
-from airflow.sdk import dag, task
-from s12.assets import questions           # ← same object, imported
-
-@dag(dag_id="s12_producer", schedule="@daily", ...)
-def producer():
-    @task(outlets=[questions])             # produces it
-    def load_questions() -> None:
-        print("loaded")
-    load_questions()
-
-producer()
-```
-
-```python
-# dags/s12/consumer.py
-from airflow.sdk import dag, task
-from s12.assets import questions           # ← the very same object
-
-@dag(dag_id="s12_consumer", schedule=[questions], ...)   # consumes it
-def consumer():
-    @task
-    def build() -> None:
-        print("questions is fresh → building report")
-    build()
-
-consumer()
-```
-
-Nothing else changes: both files sit under `dags/` (Airflow parses subfolders recursively), the **Assets** view shows the same producer→asset→consumer chain, and the consumer still must be **unpaused** to catch events. Importing the shared `Asset` is the safe default — it makes the URI impossible to mistype in one place and not the other (the silent-break trap from §2, where a one-character URI difference gives you two *different* assets and a consumer that waits forever).
 
 ---
 
