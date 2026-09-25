@@ -75,6 +75,7 @@ Legend: `[x]` = done · `[ ]` = written & ready, not finished yet.
 - [x] **🔷 P1 · BigQuery hello** — count + top-N, cost-capped → [note](practicals/P1-bigquery-hello.md)
 - [ ] **🔷 P2 · Parametrized dynamic load** — Params + dynamic mapping, incremental by date → [note](practicals/P2-parametrized-dynamic-load.md)
 - [x] **🔷 P3 · Medallion via BigQuery stored procedures** — raw→bronze→gold, CALL per layer, DQ gate (spec only) → [note](practicals/P3-bq-stored-proc-medallion.md)
+- [ ] **🔷 P4 · Backfilling the medallion** — date-parametrize P3, `airflow backfill create`, prove idempotent reprocessing (spec only) → [note](practicals/P4-medallion-backfill.md)
 
 **Reference pages** (`reference/`, read anytime): [airflow-architecture](reference/airflow-architecture.md) · [xcom-basics](reference/xcom-basics.md) · [gcp-project](reference/gcp-project.md) · [unnest](reference/unnest.md) · [etl-in-gcp](reference/etl-in-gcp.md)
 
